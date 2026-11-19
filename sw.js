@@ -1,4 +1,4 @@
-const C="leilao-v1";
+const C="leilao-v2";
 const CORE=["./","index.html","manifest.json","icon-192.png","icon-512.png","https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(C).then(c=>Promise.all(CORE.map(u=>c.add(u).catch(()=>0)))));self.skipWaiting()});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))));self.clients.claim()});

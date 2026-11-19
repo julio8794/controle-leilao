@@ -214,7 +214,23 @@ fieldset.vist{border-color:#f5a52466;background:linear-gradient(180deg,#1f1a0e,v
 #who button{margin-left:auto;background:none;border:1px solid var(--line);border-radius:8px;color:var(--mut);padding:4px 10px;font-size:12px}
 .pap{font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:3px 7px;border-radius:6px}
 .pap-admin{background:#f5a52426;color:#ffc35c}.pap-editor{background:#4c8dff26;color:#7aaaff}.pap-leitor{background:#8b98a826;color:#b8c3d1}
-.only-admin{display:none}.is-admin .only-admin{display:inline-block}
+#who select{background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font:inherit;font-size:12px;max-width:45%}
+.pnome{color:var(--txt);font-weight:600}
+.pap-dono{background:#f5a52426;color:#ffc35c}
+.cv{border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px;background:var(--bg)}
+.cv-l{display:flex;gap:8px;align-items:center;min-width:0}.cv-l code{font-size:11px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cv-b{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.cfg select{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:7px;font:inherit}
+.log{padding:6px 14px}
+.lg-d{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc);font-weight:700;margin:14px 0 4px}
+.lg{padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+.lg-h{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.lg-t{font-family:"Space Grotesk";color:var(--mut);font-size:12px;min-width:38px}
+.lg-a{font-size:11px;padding:2px 7px;border-radius:6px;background:var(--panel2);color:var(--mut)}
+.lg-alterou{background:#4c8dff22;color:#7aaaff}.lg-cadastrou{background:#3fb95022;color:#5fd36f}.lg-excluiu{background:#f8514922;color:#ff7b72}.lg-entrou{background:#f5a52422;color:#ffc35c}
+.lg-v small{color:var(--mut)}
+.lg ul{margin:6px 0 0 44px;padding:0;list-style:none;font-size:13px;color:var(--mut)}
+.lg li{margin:3px 0}.lg li span{color:var(--txt)}.lg li b{color:var(--txt);font-weight:600}
 .eq{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .eq b{display:block;font-size:14px}.eq small{color:var(--mut);font-size:12px}
 .eq select{background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:7px;font:inherit}
@@ -231,7 +247,7 @@ fieldset.vist{border-color:#f5a52466;background:linear-gradient(180deg,#1f1a0e,v
 <body>
 <header><div class="hwrap">
   <h1><span class="logo">🔨</span>Leilão de Veículos</h1>
-  <div class="tabs"><button data-tab="painel" class="on">📊 Painel</button><button data-tab="veiculos">🚗 Veículos</button><button data-tab="avaliar">🤖 Avaliar</button><button data-tab="equipe" class="only-admin">👥 Equipe</button></div>
+  <div class="tabs"><button data-tab="painel" class="on">📊 Painel</button><button data-tab="veiculos">🚗 Veículos</button><button data-tab="avaliar">🤖 Avaliar</button><button data-tab="config">⚙️ Config</button></div>
   <div id="who"></div>
   <div class="savest" id="savest">Carregando…</div>
 </div></header>
@@ -294,74 +310,121 @@ function stackHTML(porCat,total,h){
 }
 
 /* ---------- storage ---------- */
-function lsSave(){try{localStorage.setItem("leilaoVeic",JSON.stringify(vehicles))}catch(e){}}
-function lsLoad(){try{return JSON.parse(localStorage.getItem("leilaoVeic")||"[]")}catch(e){return[]}}
+function lsSave(){try{if(painelId)localStorage.setItem("leilaoVeic_"+painelId,JSON.stringify(vehicles))}catch(e){}}
+function lsLoad(p){try{return JSON.parse(localStorage.getItem("leilaoVeic_"+p)||"[]")}catch(e){return[]}}
 function setSt(m){$("#savest").textContent=m}
+
 /* ---------- Supabase ---------- */
 const SB_URL="https://ugzevdmpkcdunealeezi.supabase.co",SB_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVnemV2ZG1wa2NkdW5lYWxlZXppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxMjQ4MjYsImV4cCI6MjExMDcwMDgyNn0.KR66TG6SOnTzJpCmG1yCKE3EL8iIJnidem4i9Z3n-5A";
 const sb=window.supabase?window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
-let me=null,papel="leitor",canWrite=false,pend={},rtOn=false;
-function loadPend(){try{pend=JSON.parse(localStorage.getItem("leilaoPend")||"{}")}catch(e){pend={}}}
-function savePend(){try{localStorage.setItem("leilaoPend",JSON.stringify(pend))}catch(e){}}
+let me=null,meuNome="",papel="leitor",canWrite=false,pend={},rtCh=null,painelId=null,paineis=[],joining=false;
+const PAPEL={dono:"Dono",editor:"Editor",leitor:"Leitor"};
+const conviteToken=new URLSearchParams(location.search).get("c");
+function loadPend(){try{pend=JSON.parse(localStorage.getItem("leilaoPend2")||"{}")}catch(e){pend={}}}
+function savePend(){try{localStorage.setItem("leilaoPend2",JSON.stringify(pend))}catch(e){}}
+const pk=(p,id)=>p+"|"+id;
 const okMsg=()=>canWrite?"✓ Sincronizado — igual em todos os celulares":"👁 Somente visualização";
 function persist(v){
-  if(!canWrite){setSt("👁 Somente visualização — peça acesso de editor ao administrador");return}
-  dirty.add(v.id);clearTimeout(saveTimers[v.id]);setSt("Salvando…");
-  saveTimers[v.id]=setTimeout(async()=>{lsSave();pend[v.id]={op:"up",v:JSON.parse(JSON.stringify(v))};savePend();await flush();dirty.delete(v.id)},600);
+  if(!canWrite){setSt("👁 Somente visualização — peça ao dono para te dar acesso de editor");return}
+  const p=painelId;dirty.add(v.id);clearTimeout(saveTimers[v.id]);setSt("Salvando…");
+  saveTimers[v.id]=setTimeout(async()=>{lsSave();pend[pk(p,v.id)]={op:"up",p,id:v.id,v:JSON.parse(JSON.stringify(v))};savePend();await flush();dirty.delete(v.id)},600);
 }
 let flushing=false;
 async function flush(){
   if(!sb||!me||flushing)return;
-  const ids=Object.keys(pend);if(!ids.length){setSt(okMsg());return}
-  if(!navigator.onLine){setSt(`📴 Sem internet — ${ids.length} alteração(ões) guardada(s), envio automático ao voltar`);return}
+  const ks=Object.keys(pend);if(!ks.length){setSt(okMsg());return}
+  if(!navigator.onLine){setSt(`📴 Sem internet — ${ks.length} alteração(ões) guardada(s), envio automático ao voltar`);return}
   flushing=true;
-  try{for(const id of ids){const p=pend[id];
-    const r=p.op==="del"?await sb.from("veiculos").delete().eq("id",id):await sb.from("veiculos").upsert({id,dados:p.v,atualizado_em:new Date().toISOString(),atualizado_por:me.id});
-    if(r.error)throw r.error;delete pend[id];savePend()}
+  try{for(const k of ks){const x=pend[k];
+    const r=x.op==="del"?await sb.from("veiculos").delete().eq("painel_id",x.p).eq("id",x.id):await sb.from("veiculos").upsert({painel_id:x.p,id:x.id,dados:x.v,atualizado_em:new Date().toISOString(),atualizado_por:me.id});
+    if(r.error)throw r.error;delete pend[k];savePend()}
     setSt(okMsg());
   }catch(e){setSt("⚠ Não salvou ("+(e.message||"erro")+") — tento de novo em instantes")}
   finally{flushing=false}
 }
 window.addEventListener("online",flush);setInterval(flush,20000);
-function setRO(){document.body.classList.toggle("ro",!canWrite);document.body.classList.toggle("is-admin",papel==="admin")}
+function setRO(){document.body.classList.toggle("ro",!canWrite);document.body.classList.toggle("is-dono",papel==="dono")}
 async function removeV(id){
   if(!canWrite)return;
-  vehicles=vehicles.filter(x=>x.id!==id);lsSave();pend[id]={op:"del"};savePend();flush();render();
+  vehicles=vehicles.filter(x=>x.id!==id);lsSave();pend[pk(painelId,id)]={op:"del",p:painelId,id};savePend();flush();render();
 }
 async function initStore(){
-  vehicles=lsLoad();loadPend();
+  loadPend();
   if(!sb){render();setSt("⚠ Não consegui carregar o servidor — verifique a internet");return}
   sb.auth.onAuthStateChange((ev,ses)=>{
     if(ev==="SIGNED_OUT"){me=null;showAuth()}
-    else if((ev==="SIGNED_IN"||ev==="INITIAL_SESSION")&&ses&&!me)startSession(ses.user);
+    else if((ev==="SIGNED_IN"||ev==="INITIAL_SESSION")&&ses&&!me&&!joining&&!conviteToken)startSession(ses.user);
     else if(ev==="PASSWORD_RECOVERY")showAuth("nova");
   });
+  if(conviteToken){showConvite();return}
   const {data:{session}}=await sb.auth.getSession();
   if(!session&&!me)showAuth();
 }
-async function startSession(u){
+async function startSession(u,preferir){
   me=u;hideAuth();
-  const {data:p}=await sb.from("perfis").select("papel,nome,email").eq("id",u.id).maybeSingle();
-  papel=(p&&p.papel)||"leitor";canWrite=papel==="admin"||papel==="editor";setRO();
-  $("#who").innerHTML=`<span>👤 ${esc((p&&p.nome)||u.email)}</span><b class="pap pap-${papel}">${{admin:"Administrador",editor:"Editor",leitor:"Leitor"}[papel]}</b><button id="sair">Sair</button>`;
-  $("#sair").onclick=async()=>{await sb.auth.signOut();try{localStorage.removeItem("leilaoVeic")}catch(e){}location.reload()};
-  render();await loadAll();
-  if(!rtOn){rtOn=true;
-    sb.channel("veiculos-rt").on("postgres_changes",{event:"*",schema:"public",table:"veiculos"},pl=>{
-      if(pl.eventType==="DELETE"){const id=pl.old&&pl.old.id;if(!id||dirty.has(id)||pend[id])return;vehicles=vehicles.filter(v=>v.id!==id)}
-      else{const v=pl.new&&pl.new.dados;if(!v||dirty.has(v.id)||pend[v.id])return;const i=vehicles.findIndex(x=>x.id===v.id);if(i>=0)vehicles[i]=v;else vehicles.push(v)}
-      lsSave();if(!editing&&tab!=="avaliar")render();
-    }).subscribe();
-    document.addEventListener("visibilitychange",()=>{if(!document.hidden&&me){loadAll();flush()}});
-  }
+  const {data:ms,error}=await sb.from("membros").select("painel_id,papel,nome,paineis(nome,dono)").eq("user_id",u.id);
+  if(error){setSt("⚠ "+error.message);return}
+  paineis=(ms||[]).map(m=>({id:m.painel_id,papel:m.papel,meuNome:m.nome,nome:(m.paineis&&m.paineis.nome)||"Painel"}));
+  if(!paineis.length){
+    $("#auth").classList.add("on");$("#authBox").innerHTML=`<div class="a-logo">🔒</div><h2>Sem acesso</h2><p class="a-sub">${u.is_anonymous?"Você entrou por um convite que não está mais ativo. Peça um link novo a quem te convidou.":"Seu painel ainda está sendo criado. Recarregue a página em alguns segundos."}</p><button class="btn" style="width:100%" onclick="location.reload()">Recarregar</button><button class="a-link" id="sairX">Sair</button>`;
+    $("#sairX").onclick=async()=>{await sb.auth.signOut();location.href=location.pathname};return}
+  let alvo=preferir;try{alvo=alvo||localStorage.getItem("leilaoPainel")}catch(e){}
+  if(!paineis.find(p=>p.id===alvo))alvo=(paineis.find(p=>p.papel==="dono")||paineis[0]).id;
+  await trocarPainel(alvo);
+}
+async function trocarPainel(id){
+  const p=paineis.find(x=>x.id===id);if(!p)return;
+  painelId=id;papel=p.papel;meuNome=p.meuNome||"";canWrite=papel==="dono"||papel==="editor";setRO();
+  try{localStorage.setItem("leilaoPainel",id)}catch(e){}
+  renderWho();vehicles=lsLoad(id);render();await loadAll();
+  if(rtCh)sb.removeChannel(rtCh);
+  rtCh=sb.channel("veic-"+id).on("postgres_changes",{event:"*",schema:"public",table:"veiculos",filter:"painel_id=eq."+id},pl=>{
+    if(painelId!==id)return;
+    if(pl.eventType==="DELETE"){const vid=pl.old&&pl.old.id;if(!vid||dirty.has(vid)||pend[pk(id,vid)])return;vehicles=vehicles.filter(v=>v.id!==vid)}
+    else{const v=pl.new&&pl.new.dados;if(!v||dirty.has(v.id)||pend[pk(id,v.id)])return;const i=vehicles.findIndex(x=>x.id===v.id);if(i>=0)vehicles[i]=v;else vehicles.push(v)}
+    lsSave();if(!editing&&tab!=="avaliar"&&tab!=="config")render();
+  }).subscribe();
   flush();
 }
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&me&&painelId){loadAll();flush()}});
 async function loadAll(){
-  const {data,error}=await sb.from("veiculos").select("id,dados").order("id");
+  const p=painelId;const {data,error}=await sb.from("veiculos").select("id,dados").eq("painel_id",p).order("id");
+  if(p!==painelId)return;
   if(error){setSt("📴 Sem conexão — mostrando a última cópia deste celular");return}
-  const merged=data.map(r=>r.dados).filter(Boolean).filter(r=>!(pend[r.id]&&pend[r.id].op==="del")).map(r=>pend[r.id]&&pend[r.id].v?pend[r.id].v:r);
-  Object.values(pend).forEach(p=>{if(p.v&&!merged.find(m=>m.id===p.v.id))merged.push(p.v)});
-  vehicles=merged;lsSave();setSt(okMsg());if(!editing&&tab!=="avaliar")render();
+  const pp=Object.values(pend).filter(x=>x.p===p);
+  const merged=data.map(r=>r.dados).filter(Boolean).filter(r=>!pp.find(x=>x.id===r.id&&x.op==="del")).map(r=>{const x=pp.find(x=>x.id===r.id&&x.v);return x?x.v:r});
+  pp.forEach(x=>{if(x.v&&!merged.find(m=>m.id===x.id))merged.push(x.v)});
+  vehicles=merged;lsSave();setSt(okMsg());if(!editing&&tab!=="avaliar"&&tab!=="config")render();
+}
+function renderWho(){
+  $("#who").innerHTML=`${paineis.length>1?`<select id="pSel" aria-label="Painel">${paineis.map(p=>`<option value="${p.id}" ${p.id===painelId?"selected":""}>${esc(p.nome)}</option>`).join("")}</select>`:`<span class="pnome">${esc((paineis[0]||{}).nome||"")}</span>`}
+   <span>👤 ${esc(meuNome||me.email||"")}</span><b class="pap pap-${papel}">${PAPEL[papel]}</b><button id="sair">Sair</button>`;
+  const ps=$("#pSel");if(ps)ps.onchange=()=>{tab="painel";trocarPainel(ps.value)};
+  $("#sair").onclick=async()=>{if(me.is_anonymous&&!confirmSair())return;await sb.auth.signOut();location.href=location.pathname};
+}
+let sairOk=false;function confirmSair(){if(sairOk)return true;sairOk=true;toast("Você entrou por convite: para voltar, vai precisar do link de novo. Toque em Sair outra vez para confirmar.");setTimeout(()=>sairOk=false,5000);return false}
+
+/* ---------- convite (entrar só com o nome) ---------- */
+async function showConvite(){
+  $("#auth").classList.add("on");const box=$("#authBox");box.innerHTML=`<div class="a-logo">🔨</div><h2>Carregando convite…</h2>`;
+  const {data,error}=await sb.rpc("info_convite",{t:conviteToken});
+  const info=data&&data[0];
+  if(error||!info){box.innerHTML=`<div class="a-logo">⚠️</div><h2>Convite inválido</h2><p class="a-sub">Este link foi desativado ou está incompleto. Peça um link novo a quem te convidou.</p><button class="btn" style="width:100%" id="cvIr">Entrar com e-mail</button>`;$("#cvIr").onclick=()=>{history.replaceState(null,"",location.pathname);showAuth("entrar")};return}
+  const {data:{session}}=await sb.auth.getSession();
+  box.innerHTML=`<div class="a-logo">🤝</div><h2>Você foi convidado</h2>
+   <p class="a-sub"><b>${esc(info.dono||"Alguém")}</b> te deu acesso ao <b>${esc(info.painel)}</b> como <b>${PAPEL[info.papel]}</b>${info.papel==="editor"?" — você poderá ver e alterar motos e vistorias":" — você poderá ver as motos e vistorias"}.</p>
+   <form id="cvForm"><label>Seu nome<input id="cvNome" required maxlength="60" autocomplete="name" placeholder="Como você quer aparecer no histórico" value="${esc(session&&session.user.user_metadata&&session.user.user_metadata.nome||"")}"></label>
+   <button class="btn" style="width:100%;margin-top:14px">Entrar no painel</button></form>
+   <p class="mini" style="text-align:center">Sem senha nem e-mail. Seu acesso fica salvo neste aparelho.</p><div id="cvMsg"></div>`;
+  $("#cvForm").onsubmit=async e=>{e.preventDefault();const bt=e.target.querySelector("button");bt.disabled=true;bt.textContent="Entrando…";
+    const nome=$("#cvNome").value.trim();
+    try{joining=true;
+      let {data:{session:s}}=await sb.auth.getSession();
+      if(!s){const r=await sb.auth.signInAnonymously({options:{data:{nome}}});if(r.error)throw r.error;s=r.data.session}
+      const {data:pid,error:er}=await sb.rpc("aceitar_convite",{t:conviteToken,nome_in:nome});if(er)throw er;
+      history.replaceState(null,"",location.pathname);joining=false;await startSession(s.user,pid);toast("Bem-vindo, "+nome+"!");
+    }catch(er){joining=false;bt.disabled=false;bt.textContent="Entrar no painel";$("#cvMsg").innerHTML=`<div class="a-msg err">${esc(er.message||"Erro ao entrar")}</div>`}
+  };
 }
 
 /* ---------- login / cadastro ---------- */
@@ -393,24 +456,67 @@ function renderAuth(msg,err){
   };
 }
 
-/* ---------- equipe (admin) ---------- */
-async function equipeHTML(){
-  const {data,error}=await sb.from("perfis").select("id,email,nome,papel,criado_em").order("criado_em");
-  if(error)return `<div class="card">Não consegui carregar a equipe: ${esc(error.message)}</div>`;
-  return `<div class="sec-t">👥 Equipe · ${data.length} pessoa(s)</div>
-  <div class="card"><div class="mini" style="margin:0 0 10px">Quem cria conta entra como <b>Leitor</b> (só vê). Mude para <b>Editor</b> quem pode alterar motos e vistorias.</div>
-  ${data.map(p=>`<div class="eq"><div><b>${esc(p.nome||"—")}</b><small>${esc(p.email||"")}</small></div>
-   <select data-uid="${p.id}" ${p.id===me.id?"disabled":""}>${["leitor","editor","admin"].map(r=>`<option value="${r}" ${p.papel===r?"selected":""}>${{admin:"Administrador",editor:"Editor",leitor:"Leitor"}[r]}</option>`).join("")}</select></div>`).join("")}
-  <div class="mini">Para convidar: mande o link do app; a pessoa cria a conta e aparece aqui.</div></div>`;
+/* ---------- configurações: convite, pessoas, histórico ---------- */
+const LBL={modelo:"Modelo",ano:"Ano",placa:"Placa",cor:"Cor",status:"Status",lance:"Lance",lanceMin:"Lance mínimo",fipe:"FIPE",lote:"Lote",leiloeiro:"Leiloeiro",link:"Link do lote",grupo:"Cidade/grupo",dataLeilao:"Data do leilão",dataVistoria:"Data da vistoria",dataVenda:"Data da venda",comissaoPct:"Comissão %",taxaAdm:"Taxa administrativa",taxaPatio:"Pátio/diárias",outrosArremate:"Outras taxas",despesas:"Despesas",vendaPretendida:"Venda alvo",vendaValor:"Valor vendido",margemAlvo:"Margem desejada",obs:"Observações",fotosVist:"Fotos da vistoria",fotosRef:"Fotos de referência",fipeHist:"Histórico FIPE",avaliacao:"Avaliação",localPatio:"Local","vistoria.nota":"Nota da vistoria","vistoria.limite":"Lance limite","vistoria.obs":"Anotações da vistoria"};
+const CKV={ok:"✓ OK",at:"⚠ Atenção",pb:"✕ Problema"};
+function fmtV(campo,v){if(v===null||v===undefined||v==="")return "—";if(campo.startsWith("vistoria.checks."))return CKV[v]||"—";if(campo==="status")return STATUS[v]||v;
+  if(Array.isArray(v))return campo==="fotosVist"?`${v.length} foto(s)`:`${v.length} item(s)`;if(typeof v==="object")return "…";
+  if(/^(lance|lanceMin|fipe|vendaPretendida|vendaValor|taxaAdm|taxaPatio|outrosArremate|vistoria\.limite)$/.test(campo)&&num(v))return brl(num(v));
+  const t=String(v);return t.length>70?t.slice(0,70)+"…":t}
+let logLim=60;
+async function configHTML(){
+  CHECKS.forEach(([k,l])=>LBL["vistoria.checks."+k]="Vistoria · "+l);
+  const pa=paineis.find(p=>p.id===painelId)||{};
+  const [ms,cv,lg]=await Promise.all([
+    sb.from("membros").select("user_id,nome,papel,via_convite,criado_em").eq("painel_id",painelId).order("criado_em"),
+    papel==="dono"?sb.from("convites").select("token,papel,ativo,criado_em").eq("painel_id",painelId).eq("ativo",true).order("criado_em",{ascending:false}):Promise.resolve({data:[]}),
+    sb.from("logs").select("id,nome,veiculo,veiculo_id,acao,mudancas,criado_em").eq("painel_id",painelId).order("criado_em",{ascending:false}).limit(logLim)]);
+  const base=location.origin+location.pathname;
+  const dia=d=>new Date(d).toLocaleDateString("pt-BR",{weekday:"short",day:"2-digit",month:"2-digit"}),hora=d=>new Date(d).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  let ultDia="";
+  return `<div class="cfg">
+  <div class="sec-t">⚙️ Painel</div>
+  <div class="card">${papel==="dono"?`<label>Nome do painel<input id="pNome" value="${esc(pa.nome||"")}"></label><button class="btn ghost sm" id="pNomeOk" style="margin-top:8px">Salvar nome</button>`:`<b>${esc(pa.nome||"")}</b><div class="mini">Você é ${PAPEL[papel]} neste painel.</div>`}</div>
+  ${papel==="dono"?`<div class="sec-t">🔗 Link de convite</div>
+  <div class="card"><div class="mini" style="margin:0 0 10px">Quem abrir o link entra no seu painel <b>só digitando o nome</b>, sem e-mail nem senha. Mande pelo WhatsApp para quem vai trabalhar com você.</div>
+   ${(cv.data||[]).map(c=>`<div class="cv"><div class="cv-l"><span class="pap pap-${c.papel}">${PAPEL[c.papel]}</span><code>${esc(base)}?c=${esc(c.token)}</code></div>
+     <div class="cv-b"><button class="btn sm" data-cvcp="${esc(base)}?c=${esc(c.token)}">📋 Copiar</button><a class="btn ghost sm" style="text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent("Acesse o painel de leilão: "+base+"?c="+c.token)}">WhatsApp</a><button class="btn danger sm" data-cvoff="${esc(c.token)}">Desativar</button></div></div>`).join("")||`<div class="mini">Nenhum link ativo.</div>`}
+   <div class="toolbar" style="margin:10px 0 0"><select id="cvPapel"><option value="editor">Pode editar</option><option value="leitor">Só visualizar</option></select><button class="btn" id="cvNovo">＋ Gerar link</button></div>
+   <div class="mini">Desativar um link impede novas entradas por ele. Quem já entrou continua até você remover em “Pessoas”.</div></div>`:""}
+  <div class="sec-t">👥 Pessoas com acesso · ${(ms.data||[]).length}</div>
+  <div class="card">${(ms.data||[]).map(m=>`<div class="eq"><div><b>${esc(m.nome||"—")}${m.user_id===me.id?" (você)":""}</b><small>${m.via_convite?"entrou por convite":"conta com e-mail"} · desde ${new Date(m.criado_em).toLocaleDateString("pt-BR")}</small></div>
+    ${papel==="dono"&&m.papel!=="dono"?`<div style="display:flex;gap:6px"><select data-mpap="${m.user_id}"><option value="editor" ${m.papel==="editor"?"selected":""}>Editor</option><option value="leitor" ${m.papel==="leitor"?"selected":""}>Leitor</option></select><button class="btn danger sm" data-mrem="${m.user_id}" data-mnome="${esc(m.nome||"")}">Remover</button></div>`:`<span class="pap pap-${m.papel}">${PAPEL[m.papel]}</span>`}</div>`).join("")}</div>
+  <div class="sec-t">🕘 Histórico de alterações</div>
+  <div class="card log">${(lg.data||[]).map(l=>{const d=dia(l.criado_em);const sep=d!==ultDia?`<div class="lg-d">${d}</div>`:"";ultDia=d;
+    const ch=Array.isArray(l.mudancas)?l.mudancas:[];
+    return sep+`<div class="lg"><div class="lg-h"><span class="lg-t">${hora(l.criado_em)}</span><b>${esc(l.nome||"Alguém")}</b> <span class="lg-a lg-${esc((l.acao||"").split(" ")[0])}">${esc(l.acao||"")}</span> ${l.veiculo?`<span class="lg-v">${esc(l.veiculo)}${l.veiculo_id&&/^alag-/.test(l.veiculo_id)?` <small>${esc(l.veiculo_id.replace(/^alag-/,"lote "))}</small>`:""}</span>`:""}</div>
+     ${ch.length?`<ul>${ch.slice(0,12).map(c=>`<li><span>${esc(LBL[c.campo]||c.campo)}</span>: ${esc(fmtV(c.campo,c.de))} → <b>${esc(fmtV(c.campo,c.para))}</b></li>`).join("")}${ch.length>12?`<li>+ ${ch.length-12} outras</li>`:""}</ul>`:""}</div>`}).join("")||`<div class="mini">Nenhuma alteração registrada ainda.</div>`}
+   ${(lg.data||[]).length>=logLim?`<button class="btn ghost sm" id="lgMais" style="margin-top:10px">Ver mais antigos</button>`:""}</div>
+  ${papel!=="dono"?`<div class="sec-t">Sair deste painel</div><div class="card"><button class="btn danger sm" id="sairPainel">Sair do painel</button></div>`:""}
+  </div>`;
+}
+async function renderConfig(){
+  $("#main").innerHTML='<div class="mini">Carregando…</div>';const h=await configHTML();if(tab!=="config")return;$("#main").innerHTML=h;
+  const m=$("#main");
+  const ok=$("#pNomeOk");if(ok)ok.onclick=async()=>{const n=$("#pNome").value.trim();if(!n)return;const {error}=await sb.from("paineis").update({nome:n}).eq("id",painelId);if(error)return toast("Erro: "+error.message);paineis.find(p=>p.id===painelId).nome=n;renderWho();toast("Nome salvo ✓")};
+  const nv=$("#cvNovo");if(nv)nv.onclick=async()=>{const {error}=await sb.from("convites").insert({painel_id:painelId,papel:$("#cvPapel").value,criado_por:me.id});if(error)return toast("Erro: "+error.message);renderConfig()};
+  m.querySelectorAll("[data-cvcp]").forEach(b=>b.onclick=async()=>{const u=b.dataset.cvcp;try{if(navigator.share){await navigator.share({title:"Painel de leilão",text:"Acesse o painel de leilão:",url:u});return}await navigator.clipboard.writeText(u);toast("Link copiado ✓")}catch(e){try{await navigator.clipboard.writeText(u);toast("Link copiado ✓")}catch(_){prompt("Copie o link:",u)}}});
+  m.querySelectorAll("[data-cvoff]").forEach(b=>b.onclick=async()=>{const {error}=await sb.from("convites").update({ativo:false}).eq("token",b.dataset.cvoff);toast(error?"Erro: "+error.message:"Link desativado");renderConfig()});
+  m.querySelectorAll("[data-mpap]").forEach(sel=>sel.onchange=async()=>{const {error}=await sb.from("membros").update({papel:sel.value}).eq("painel_id",painelId).eq("user_id",sel.dataset.mpap);toast(error?"Erro: "+error.message:"Permissão atualizada ✓")});
+  m.querySelectorAll("[data-mrem]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Confirmar?";setTimeout(()=>{b.dataset.c="";b.textContent="Remover"},4000);return}
+    const {error}=await sb.from("membros").delete().eq("painel_id",painelId).eq("user_id",b.dataset.mrem);toast(error?"Erro: "+error.message:"Acesso removido");renderConfig()});
+  const lm=$("#lgMais");if(lm)lm.onclick=()=>{logLim+=100;renderConfig()};
+  const sp=$("#sairPainel");if(sp)sp.onclick=async()=>{if(sp.dataset.c!=="1"){sp.dataset.c="1";sp.textContent="Toque de novo para confirmar";return}
+    await sb.from("membros").delete().eq("painel_id",painelId).eq("user_id",me.id);try{localStorage.removeItem("leilaoPainel")}catch(e){}location.reload()};
 }
 
 /* ---------- views ---------- */
 function render(){renderBg()}
 function renderBg(){
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b.dataset.tab===tab));
-  $("#fab").style.display=tab==="avaliar"?"none":"";
+  $("#fab").style.display=tab==="avaliar"||tab==="config"?"none":"";
   if(tab==="avaliar"){$("#main").innerHTML=avaliarHTML();bindAv();return}
-  if(tab==="equipe"){$("#main").innerHTML='<div class="mini">Carregando…</div>';equipeHTML().then(h=>{if(tab!=="equipe")return;$("#main").innerHTML=h;$("#main").querySelectorAll("[data-uid]").forEach(sel=>sel.onchange=async()=>{const {error}=await sb.from("perfis").update({papel:sel.value}).eq("id",sel.dataset.uid);toast(error?"Erro: "+error.message:"Permissão atualizada ✓")})});return}
+  if(tab==="config"){renderConfig();return}
   $("#main").innerHTML=tab==="painel"?painel():lista();
   bindMain();
 }
@@ -485,7 +591,7 @@ const CHECKS=[["motor","Motor gira / sem barulho"],["chassi","Chassi confere"],[
 const fmtD=d=>d?d.split("-").reverse().join("/"):"";
 function pacotePendente(p){return p.itens.filter(it=>!vehicles.some(v=>v.id==="alag-"+it[0]||(v.link&&v.link===it[6])))}
 function pacoteBanner(){
-  if(!canWrite)return "";
+  if(!canWrite||!vehicles.some(v=>v.grupo==="Alagoinhas"))return "";
   return PACOTES.map(p=>{const pend=pacotePendente(p);if(!pend.length)return "";return `<div class="pkg"><div class="pkg-thumbs">${pend.slice(0,4).map(it=>`<img src="fotos/${it[0]}-1.jpg" alt="">`).join("")}</div>
    <div class="pkg-txt"><span class="pkg-k">📍 ${esc(p.grupo)} · ${fmtD(p.data)}</span><b>${esc(p.titulo)}: ${pend.length} moto(s) com fotos de referência</b><small>${esc(p.leilao)}</small></div>
    <button class="btn" data-pkg="${p.id}">Importar para o sistema</button></div>`}).join("");
