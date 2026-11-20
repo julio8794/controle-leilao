@@ -52,6 +52,7 @@ const AGENTES: Record<string, { prompt: string; modelo: string }> = {
   ler_edital: { prompt: Deno.env.get("PROMPT_LER_EDITAL") || "pmpt_6aff950fd0f481948847945c280c1361055ffbbf3d8005b4", modelo: "gpt-6.2-sol" },
   importar_lote: { prompt: Deno.env.get("PROMPT_IMPORTAR_LOTE") || "pmpt_6aff9564f2f4819087db1d058af07710078f2f34ff066db9", modelo: "gpt-6-luna" },
   analisar_fotos: { prompt: Deno.env.get("PROMPT_ANALISAR_FOTOS") || "pmpt_6aff95809a1c8194b72e09a85b69480003274924a703d52b", modelo: "gpt-6.2-sol" },
+  escolher_fipe: { prompt: Deno.env.get("PROMPT_ESCOLHER_FIPE") || "", modelo: "gpt-6-luna" },
   mapear_planilha: { prompt: Deno.env.get("PROMPT_MAPEAR_PLANILHA") || "pmpt_6aff959a109c819392d43d4ef4c665bb025bc8d8b650f83b", modelo: "gpt-6-luna" },
 };
 let AGENTE_ATUAL = "";
@@ -91,6 +92,37 @@ REGRAS INVIOLÁVEIS:
 async function textoPdf(url: string) {
   const { bytes } = await baixar(url, 20e6); const pdf = await getDocumentProxy(bytes);
   const { text } = await extractText(pdf, { mergePages: false }); return (text as string[]);
+}
+// ---------- Anexo I: tabela de lotes (leitura determinística, sem IA) ----------
+function lerAnexoLotes(paginas: string[]) {
+  const COMB = "ALCOOL\\/GASOLINA\\/\\s?GNV|GASOLINA\\/ALCOOL\\/\\s?GNV|ALCOOL\\/GASOLINA|GASOLINA\\/ALCOOL|GASOLINA\\/ELETRICO|GASOLINA|ALCOOL|ETANOL|FLEX|DIESEL|ELETRICO|ELÉTRICO|GNV|N\\/I";
+  const out: any[] = [], falhas: any[] = []; let patio = "";
+  let corpo = "";
+  for (const l of paginas.join("\n").split("\n")) {
+    const m = l.trim(); if (/^ANEXO\b/i.test(m)) continue;
+    if (/^[A-ZÀ-Ú\/ ]{4,40}$/.test(m) && !/^(VEÍCULO|VEICULO|CONSERVADO|SUCATA|SIM|NÃO|NAO|LOTE|PLACA|O\/LANCE|MÍNIMO|MINIMO|NAÇÃO|CLASSIFICAÇÃO|AVALIAÇÃ|TAXA\/|DESALIE)/.test(m) && !/PÁGINA|EDITAL/.test(m)) { corpo += `\n@@PATIO ${m}\n`; continue }
+    if (/EDITAL DE LEILÃO|^LOTE PLACA|^TAXA\/|^DESALIE|^NAÇÃO|^CLASSIFICAÇÃO|^AVALIAÇÃ|^O\/LANCE|^MÍNIMO$/.test(m)) continue;
+    corpo += " " + m;
+  }
+  const partes = corpo.split(/(?=@@PATIO )|(?=(?:^|\s)\d{4}\s+(?:[A-Z]{3}\d[A-Z0-9]\d{2}|\d\s+EMPLAC|SEM\s+PLACA|N\/I)\s)/);
+  const re = new RegExp(`^\\s*(\\d{4})\\s+([A-Z]{3}\\d[A-Z0-9]\\d{2}|\\d\\s+EMPLAC|SEM\\s+PLACA|N\\/I)\\s+([A-HJ-NPR-Z0-9]{17}|N\\/I)\\s+(.+?)\\s+(\\d{6,11}|N\\/I)\\s+([A-Z]{2}|N\\/I)\\s+(.+?)\\s+(\\d{4}\\/\\d{4}|N\\/I)\\s+(${COMB})\\s+(.+?)\\s+(SIM|NÃO|NAO)\\s+(.+?)\\s+R\\$\\s*([\\d.]+,\\d{2})`, "i");
+  for (const p of partes) {
+    const s = p.replace(/\s+/g, " ").trim(); if (!s) continue;
+    if (s.startsWith("@@PATIO ")) { patio = s.slice(8).replace(/^.*R\$\s*[\d.,]+\s*/, "").trim(); continue }
+    if (!/^\d{4}\s/.test(s)) continue;
+    const m = s.match(re); if (!m) { falhas.push({ patio, texto: s.slice(0, 260) }); continue }
+    const [, lote, placa, chassi, modelo, renavam, uf, cor, ano, comb, motor, desal, classif, valor] = m;
+    out.push({ patio, lote, placa: /EMPLAC|SEM|N\/I/.test(placa) ? "" : placa, semPlaca: /EMPLAC|SEM/.test(placa), chassi: chassi === "N/I" ? "" : chassi, modelo: modelo.trim(), renavam: renavam === "N/I" ? "" : renavam, uf: uf === "N/I" ? "" : uf, cor: cor.trim(), ano: ano === "N/I" ? "" : ano, combustivel: comb.replace(/\s+/g, ""), motor: motor.replace(/\s+/g, ""), desalienacao: /SIM/i.test(desal), classificacao: classif.trim(), lanceMin: Number(valor.replace(/\./g, "").replace(",", ".")), linha: s.slice(0, 300) });
+  }
+  return { lotes: out, falhas };
+}
+async function escolherFipe(veiculo: string, ano: string, candidatos: string[]) {
+  const c = (candidatos || []).slice(0, 12).map(String);
+  const schema = obj({ indice: N(["integer"]), motivo: { type: "string" } });
+  const instr = `Você casa o nome de um veículo do DETRAN/leiloeiro com o modelo da TABELA FIPE.
+Escolha o índice (0 a ${c.length - 1}) do candidato que é a MESMA versão (mesma cilindrada, mesma linha/versão, ex.: FAN, TITAN, START, CARGO, ES/ESD/EX). Use somente a lista. Se nenhum for claramente a mesma versão, ou se houver empate real, devolva indice null. motivo: 1 frase.`;
+  const { dados, uso } = await openai(instr, [{ type: "input_text", text: JSON.stringify({ veiculo, ano, candidatos: c.map((n, i) => `${i}: ${n}`) }) }], "escolha_fipe", schema);
+  const i = dados.indice; return { resultado: { indice: Number.isInteger(i) && i >= 0 && i < c.length ? i : null, motivo: dados.motivo }, uso };
 }
 // ---------- skills ----------
 async function lerEdital(url: string) {
@@ -212,7 +244,9 @@ Deno.serve(async (req) => {
   try {
     let r: any;
     if (acao === "paginas_edital") { const ps = await textoPdf(body.url); const re = new RegExp(body.filtro || "chassi|renavam|placa", "i"); return json({ total: ps.length, paginas: ps.map((t, i) => ({ n: i + 1, t })).filter(p => re.test(p.t)).map(p => ({ ...p, t: p.t.slice(0, body.max || 6000) })) }) }
+    if (acao === "lotes_edital") { const ps = await textoPdf(body.url); return json({ paginas: ps.length, ...lerAnexoLotes(ps) }) }
     if (acao === "ler_edital") r = await lerEdital(body.url);
+    else if (acao === "escolher_fipe") r = await escolherFipe(body.veiculo, body.ano, body.candidatos);
     else if (acao === "importar_lote") r = await importarLote(body.url);
     else if (acao === "analisar_fotos") r = await analisarFotos(body.imagens, body.modelo, body.ano, body.base);
     else if (acao === "mapear_planilha") r = await mapearPlanilha(body.cabecalhos, body.amostra);

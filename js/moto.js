@@ -153,7 +153,7 @@ function bindEditor(){
   const s=$("#sheet");if(!$("#dlPecas"))s.insertAdjacentHTML("beforeend",dlPecas());
   s.oninput=e=>{const t=e.target;const v=editing;if(!v)return;
     if(t.dataset.k){v[t.dataset.k]=t.value;if(t.dataset.k==="modelo")$("#eTitle").textContent=t.value||"Novo veículo";
-      if(t.dataset.k==="grupoId"){const g=grupoDe(v);v.grupo=g?g.nome:"";renderETab()}
+      if(t.dataset.k==="grupoId"){const g=grupoDe(v);v.grupo=g?g.nome:"";renderETab();if(g)autoCompletar(v)}
       if(t.dataset.k==="vendaValor"&&num(t.value)>0&&v.status!=="vendido"){v.status="vendido";if(!v.dataVenda)v.dataVenda=new Date().toISOString().slice(0,10);toast("Status: Vendido")}}
     else if(t.dataset.dk){const d=(v.despesas||[]).find(x=>x.id===t.closest(".drow").dataset.did);if(d){d[t.dataset.dk]=t.value;registrarPreco("real:"+v.id+":"+d.id,d.desc,d.cat,d.valor,"gasto_real",v)}}
     else if(t.dataset.fh!=null){const h=(v.fipeHist||[])[+t.dataset.fh];if(h)h[t.dataset.ff]=t.value}

@@ -17,7 +17,7 @@ function editaisHTML(){
      ${g.data_leilao?`<span class="chip ${d!=null&&d<0?"st-vendido":"st-avenda"}">${fmtD(g.data_leilao)}${d!=null&&d>=0?` · ${d===0?"hoje":d+"d"}`:""}</span>`:""}</div>
      <div class="gchips">${custasResumo(g.custas).map(t=>`<span>${esc(t)}</span>`).join("")}</div>
      <div class="vnums"><div><span>Motos</span><b>${ms.length}</b></div><div><span>Vistoriadas</span><b>${vist}/${ms.length}</b></div><div class="fin"><span>Soma dos limites</span><b>${lim?brl(lim):"—"}</b></div></div>
-     <div class="toolbar" style="margin:12px 0 0"><button class="btn ghost sm" data-gver="${g.id}">🚗 Ver motos</button><button class="btn ghost sm" data-gcmp="${g.id}">🏁 Comparar</button>${podeGerir()?`<button class="btn ghost sm" data-gedit="${g.id}">✎ Custas do edital</button>`:`<button class="btn ghost sm" data-gedit="${g.id}">📄 Ver edital</button>`}</div></div>`}).join("")||`<div class="empty card">Nenhum grupo ainda. Crie um para cada leilão/edital (ex.: Alagoinhas 25/11, Feira de Santana, Simões Filho).</div>`}</div>`;
+     <div class="toolbar" style="margin:12px 0 0"><button class="btn ghost sm" data-gver="${g.id}">🚗 Ver motos</button><button class="btn ghost sm" data-gcmp="${g.id}">🏁 Comparar</button>${podeGerir()&&g.edital_url?`<button class="btn ghost sm" data-gconf="${g.id}">🧩 Completar dados</button>`:""}${podeGerir()?`<button class="btn ghost sm" data-gedit="${g.id}">✎ Custas do edital</button>`:`<button class="btn ghost sm" data-gedit="${g.id}">📄 Ver edital</button>`}</div></div>`}).join("")||`<div class="empty card">Nenhum grupo ainda. Crie um para cada leilão/edital (ex.: Alagoinhas 25/11, Feira de Santana, Simões Filho).</div>`}</div>`;
 }
 function bindEditais(){
   const m=$("#main");
@@ -25,6 +25,8 @@ function bindEditais(){
   m.querySelectorAll("[data-gedit]").forEach(b=>b.onclick=()=>abrirGrupo(b.dataset.gedit));
   m.querySelectorAll("[data-gver]").forEach(b=>b.onclick=()=>{fgrupoId=b.dataset.gver;vmodo="lista";tab="veiculos";render()});
   m.querySelectorAll("[data-gcmp]").forEach(b=>b.onclick=()=>{fgrupoId=b.dataset.gcmp;vmodo="comparar";tab="veiculos";render()});
+  m.querySelectorAll("[data-gconf]").forEach(b=>b.onclick=async()=>{b.disabled=true;const g=grupos.find(x=>x.id===b.dataset.gconf);
+    try{await lotesDoGrupo(g,true);const r=await completarGrupo(g.id,b);toast(`${r.n} moto(s) conferida(s)${r.div?` · ${r.div} com algo a conferir`:""}`);fgrupoId=g.id;vmodo="lista";tab="veiculos";render()}catch(e){toast(e.message);b.disabled=false;b.textContent="🧩 Completar dados"}});
 }
 const CUSTAS_NUM=[["comissaoPct","Comissão do leiloeiro (%)"],["taxaAdmPct","Taxa administrativa (%)"],["prazoPagamentoH","Prazo de pagamento (horas)"],["liberacaoDias","Retirada liberada após (dias do leilão)"],["prazoTransferenciaDias","Prazo de transferência (dias)"],["diasCarencia","Dias sem cobrar estadia"],["estadiaDia","Estadia por dia (R$)"],["margemPct","Margem desejada (%)"],["contingPct","Reserva p/ imprevistos (%)"]];
 function abrirGrupo(id){

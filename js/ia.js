@@ -72,7 +72,7 @@ function salvarLote(){
   const v={id:uid(),modelo:pega("modelo"),ano:pega("ano"),cor:pega("cor"),placa:pega("placa_final"),chassi:pega("chassi"),km:String(pega("km")||""),lote:pega("lote"),lanceMin:pega("lance_minimo")||"",lance:"",
     dataLeilao:pega("data_leilao")||(g&&g.data_leilao)||"",leiloeiro:pega("leiloeiro")||(g&&g.leiloeiro)||"",grupoId:g?g.id:"",grupo:g?g.nome:"",status:"avaliacao",link:r.url,fotosRef:fotos.length?fotos:undefined,
     despesas:[],orcado:[],vistoria:{checks:{}},fipeHist:[],obs,origemIA:{trechos:Object.fromEntries(LOTE_CAMPOS.filter(([k])=>pega(k)!=="").map(([k])=>[k,r[k].trecho]))},criado:Date.now()};
-  if(!v.fotosRef)delete v.fotosRef;vehicles.unshift(v);persist(v);loteRes=null;toast("Moto cadastrada ✓");openEditor(v.id);
+  if(!v.fotosRef)delete v.fotosRef;vehicles.unshift(v);persist(v);loteRes=null;toast("Moto cadastrada ✓ · completando com edital e FIPE…");etab="dados";openEditor(v.id);autoCompletar(v);
 }
 
 /* ----- analisar_fotos (aba Avaliar) ----- */
@@ -152,13 +152,13 @@ function valCampo(k,x){x=String(x??"").trim();if(!x)return "";
   if(k==="status"){const n=norm(x);return Object.keys(STATUS).find(s=>norm(STATUS[s])===n||s===n)||""}return x}
 function importarLinhas(){
   const p=plan;if(!p.mapa.includes("modelo"))return toast("Indique a coluna do modelo");if(grupos.length&&!p.grupo)return toast("Escolha o grupo / edital");
-  const g=grupos.find(x=>x.id===p.grupo);let n=0,m=0;
+  const g=grupos.find(x=>x.id===p.grupo);let n=0,m=0;const novos=[];
   p.dados.forEach(l=>{const o={};p.mapa.forEach((k,i)=>{if(k){const v=valCampo(k,l[i]);if(v!=="")o[k]=v}});if(!o.modelo)return;
     const ex=vehicles.find(v=>o.lote&&v.lote===o.lote&&norm(v.modelo)===norm(o.modelo)&&(!g||v.grupoId===g.id));
     if(ex){Object.assign(ex,o);persist(ex);m++;return}
     const v={id:uid(),status:"avaliacao",despesas:[],orcado:[],vistoria:{checks:{}},fipeHist:[],criado:Date.now(),...o,grupoId:g?g.id:"",grupo:g?g.nome:"",dataLeilao:o.dataLeilao||(g&&g.data_leilao)||"",leiloeiro:o.leiloeiro||(g&&g.leiloeiro)||""};
-    vehicles.push(v);persist(v);n++});
-  plan=null;$("#ov").classList.remove("on");document.body.style.overflow="";fgrupoId=g?g.id:"";tab="veiculos";render();toast(`${n} importada(s)${m?` · ${m} atualizada(s)`:""} ✓`);
+    vehicles.push(v);persist(v);novos.push(v);n++});
+  plan=null;$("#ov").classList.remove("on");document.body.style.overflow="";fgrupoId=g?g.id:"";tab="veiculos";render();toast(`${n} importada(s)${m?` · ${m} atualizada(s)`:""} ✓ · completando dados…`);(async()=>{for(const v of novos){try{await completarDados(v)}catch(e){}}render()})();
 }
 async function exportarPlanilha(){
   try{const X=await carregarXLSX();const arr=filtrados();

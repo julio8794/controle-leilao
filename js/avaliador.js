@@ -48,7 +48,7 @@ function avaliarHTML(){
    ${avIn("comissaoPct","Comissão leiloeiro (%)",{num:1})}${avIn("taxas","Taxas fixas: adm + pátio + remoção (R$)",{num:1})}
    ${avIn("margem","Margem de lucro desejada (%)",{num:1})}${avIn("conting","Reserva p/ imprevistos (%)",{num:1})}</div>
    <div style="margin-top:10px">${avIn("vendaAlvo","Preço de venda alvo (R$) — vazio = sugestão da IA",{num:1})}</div>
-   <div class="toolbar" style="margin:10px 0 0"><a class="lk" style="font-size:13px" href="https://veiculos.fipe.org.br/" target="_blank" rel="noopener">🔎 Consultar FIPE oficial ↗</a><span class="mini" style="margin:0">Se deixar a FIPE vazia, a IA estima (confirme no site oficial).</span></div>
+   <div class="toolbar" style="margin:10px 0 0"><button class="btn ghost sm" id="avFipe">💲 Buscar FIPE oficial</button><span class="mini" style="margin:0" id="avFipeSt">${av.fipeRef?esc(av.fipeRef.modelo+" · "+av.fipeRef.mes):"Pela tabela FIPE oficial, com modelo e ano preenchidos."}</span></div>
   </div>
 
   <button class="btn aibtn" id="avGo">🤖 Analisar com IA</button>

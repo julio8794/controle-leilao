@@ -96,6 +96,7 @@ function importarPacote(id){
       obs:"Leilão: "+obs,link,grupo:g.nome,grupoId:g.id,dataVistoria:p.data,localPatio:p.local,fotosRef,vistoria:{checks:{},nota:"",limite:"",obs:""},fipeHist:[],criado:Date.now()};
     vehicles.push(v);persist(v);n++;
   });
+  const nov=vehicles.filter(x=>x.grupoId===g.id&&!x.conferencia);(async()=>{for(const x of nov){try{await completarDados(x)}catch(e){}}render()})();
   fgrupoId=g.id;tab="veiculos";render();toast(`${n} moto(s) importada(s)${m?` · ${m} atualizada(s)`:""} ✓`);
 }
 function vistProg(v){const c=(v.vistoria&&v.vistoria.checks)||{};const done=Object.keys(c).filter(k=>c[k]).length;const pb=Object.values(c).filter(x=>x==="pb").length;return {done,tot:CHECKS.length,pb}}
