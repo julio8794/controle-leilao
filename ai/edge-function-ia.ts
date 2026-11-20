@@ -114,9 +114,10 @@ TAREFA: ler o EDITAL de leilão e extrair as custas e prazos que o arrematante p
 - NÃO preencha custos de vistoria, transferência ou despachante cobrados por terceiros, pois não fazem parte do edital.
 - obs: avisos curtos sobre conversões feitas ou ambiguidades encontradas.`;
   // economia: manda só as páginas que tratam de custas/prazos (a verificação continua sobre o texto inteiro)
-  const CHAVE = /comiss|taxa|prazo|pagament|retirad|liberad|transfer|estadia|di[aá]ria|leiloeir|comitente|d[eé]bito|ipva|multa|licenciament|remo[cç][aã]o|sess[aã]o|encerra|data/i;
+  const CHAVE = /comiss[aã]o|taxa administrativa|taxa de|prazo de|pagamento|retirad|liberad|transfer[eê]ncia|estadia|di[aá]ria|d[eé]bitos?|ipva|multas?\b|remo[cç][aã]o|guincho/gi;
   const paginas = texto.split(/(?=\[\[página \d+\]\])/).filter(Boolean);
-  const relevantes = paginas.filter((p, i) => i < 2 || CHAVE.test(p));
+  // páginas com densidade mínima de termos de custas/prazos (+ as 2 primeiras, com data e partes)
+  const relevantes = paginas.filter((p, i) => i < 2 || (p.match(CHAVE) || []).length >= 3);
   const enviado = (relevantes.length ? relevantes : paginas).join("\n\n").slice(0, 120000);
   const content = escaneado
     ? [{ type: "input_file", filename: "edital.pdf", file_data: "data:application/pdf;base64," + b64(bytes) }, { type: "input_text", text: instr }]
@@ -137,6 +138,8 @@ async function importarLote(url: string) {
   const fotos = new Set<string>(); const abs = (u: string) => { try { return new URL(u.replace(/&amp;/g, "&"), final).href } catch { return null } };
   for (const m of html.matchAll(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/gi)) { const a = abs(m[1]); if (a) fotos.add(a) }
   for (const m of html.matchAll(/(?:src|data-src|href)=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)) { const a = abs(m[1]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder/i.test(a)) fotos.add(a) }
+  // fotos carregadas por JSON/JS (URLs soltas, inclusive com barras escapadas)
+  for (const m of html.replace(/\\\//g, "/").matchAll(/https?:\/\/[^"'\s<>()]+?\.(?:jpe?g|png|webp)(?:\?[^"'\s<>()]*)?/gi)) { const a = abs(m[0]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder|thumb_?s?mall/i.test(a)) fotos.add(a) }
   const texto = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|li|tr|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, 60000);
   const props: Record<string, any> = {}; ["modelo", "marca", "ano", "cor", "placa_final", "chassi", "lote", "data_leilao", "leiloeiro", "comitente", "situacao", "observacoes"].forEach(k => props[k] = campo("string")); ["km", "lance_minimo", "lance_atual"].forEach(k => props[k] = campo("number"));
   const instr = `${REGRAS_GERAIS}
