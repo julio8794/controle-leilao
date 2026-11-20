@@ -94,7 +94,7 @@ async function runAI(){
     else imgs=(av._fotosLink||[]).slice(0,8);
     if(!imgs.length)throw new Error("Nenhuma foto disponível. Envie as fotos do lote");
     st.textContent=`🔍 A IA está examinando ${imgs.length} foto(s)…`;
-    const r=await chamarIA("analisar_fotos",{imagens:imgs,modelo:av.modelo,ano:av.ano,base:nomesConhecidos()});
+    const r=await chamarIA("analisar_fotos",{imagens:imgs,modelo:av.modelo,ano:av.ano,base:nomesConhecidos(),ref:av.link||""});
     const conf=r.itens.length?r.itens.reduce((a,i)=>a+i.confianca,0)/r.itens.length:0;
     av.result={resumo:r.resumo,confianca:conf>=.75?"alta":conf>=.5?"media":"baixa",condicao_geral:"",nota:0,itens:r.itens,riscos:[],alertas_documentacao:[],dicas_vistoria:(r.nao_avaliavel||[]).map(x=>"Conferir no pátio: "+x),fipe_estimada:null,preco_revenda_sugerido:null};
     av.data=new Date().toISOString();

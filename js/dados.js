@@ -59,7 +59,7 @@ async function buscarFipe(modelo,ano,tipo){
   if(!comAno.length)return {erro:"Nenhum modelo da FIPE com esse nome e ano",candidatos:cand.map(c=>c.m.nome)};
   let esc=null,metodo="",motivo="";
   if(comAno.length===1||comAno[0].s-comAno[1].s>=2){esc=comAno[0];metodo="exato"}
-  else{try{const r=await chamarIA("escolher_fipe",{veiculo:modelo,ano:String(ano),candidatos:comAno.map(c=>c.m.nome)});if(r.indice!=null){esc=comAno[r.indice];metodo="ia";motivo=r.motivo}}catch(e){motivo="IA indisponível: "+e.message}}
+  else{try{const r=await chamarIA("escolher_fipe",{veiculo:modelo,ano:String(ano),candidatos:comAno.map(c=>c.m.nome),ref:"fipe:"+modelo+" "+ano});if(r.indice!=null){esc=comAno[r.indice];metodo="ia";motivo=r.motivo}}catch(e){motivo="IA indisponível: "+e.message}}
   const cands=comAno.map(c=>({nome:c.m.nome,cod:c.m.codigo,anoCod:c.anoCod,marca:mk.codigo,tipo}));
   if(!esc)return {duvida:true,candidatos:cands,motivo};
   return {...await valorFipe(tipo,mk.codigo,esc.m.codigo,esc.anoCod),metodo,motivo,candidatos:cands};

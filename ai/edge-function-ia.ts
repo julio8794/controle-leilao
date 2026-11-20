@@ -10,6 +10,17 @@ const LIMITE = Number(Deno.env.get("IA_LIMITE_DIA") || 150);
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 const erro = (m: string, s = 400) => json({ erro: m }, s);
 
+// ---------- preços (US$ por 1 milhão de tokens: entrada, entrada em cache, saída) ----------
+// Fonte: developers.openai.com/api/docs/pricing (nov/2026). Atualize aqui se a OpenAI mudar.
+const PRECOS: [RegExp, number, number, number][] = [
+  [/^gpt-6\.2-astra/, 8, 0.40, 40], [/^gpt-6\.2-sol/, 2, 0.10, 10], [/^gpt-6-astra/, 10, 1, 50], [/^gpt-6\.1-sol/, 2, 0.10, 10], [/^gpt-6\.1-terra/, 1, 0.05, 5],
+  [/^gpt-6-luna/, 0.10, 0.01, 0.50], [/^gpt-6-sol/, 2, 0.20, 10], [/^gpt-5\.6-sol/, 4, 0.40, 20], [/^gpt-5\.6-luna/, 0.20, 0.02, 1.20], [/^gpt-5\.5-pro/, 30, 30, 180], [/^gpt-5\.5/, 5, 0.50, 30],
+  [/^gpt-5\.4-mini/, 0.75, 0.075, 4.5], [/^gpt-5\.4-nano/, 0.20, 0.02, 1.25], [/^gpt-5\.4/, 2.5, 0.25, 15], [/^gpt-5-mini/, 0.25, 0.025, 2], [/^gpt-5-nano/, 0.05, 0.005, 0.40], [/^gpt-5/, 1.25, 0.125, 10],
+];
+function custoUSD(modelo: string, entrada: number, cache: number, saida: number) {
+  const p = PRECOS.find(([re]) => re.test(String(modelo || ""))); if (!p) return null;
+  return ((Math.max(0, entrada - cache)) * p[1] + cache * p[2] + saida * p[3]) / 1e6;
+}
 // ---------- utilidades de verificação ----------
 const norm = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9%,.$]+/g, " ").replace(/\s+/g, " ").trim();
 const digitos = (s: string) => String(s || "").replace(/\D/g, "");
@@ -274,26 +285,28 @@ Deno.serve(async (req) => {
   const { data: papel } = await sb.rpc("papel_no_painel", { p: painel_id });
   if (!["dono", "editor"].includes(papel)) return erro("Sem permissão para usar a IA neste painel", 403);
   const hoje = new Date(); hoje.setUTCHours(3, 0, 0, 0); if (hoje > new Date()) hoje.setUTCDate(hoje.getUTCDate() - 1);
-  const { count } = await sb.from("ia_uso").select("id", { count: "exact", head: true }).eq("painel_id", painel_id).gte("criado_em", hoje.toISOString());
+  const { count } = await sb.from("ia_uso").select("id", { count: "exact", head: true }).eq("painel_id", painel_id).eq("origem", "ia").gte("criado_em", hoje.toISOString());
   if ((count || 0) >= LIMITE) return erro(`Limite diário de ${LIMITE} usos da IA atingido`, 429);
   const t0 = Date.now(); AGENTE_ATUAL = acao;
   const chave = ["ler_edital", "importar_lote"].includes(acao) && body.url ? acao + ":v3:" + body.url : null;
-  if (chave && !body.refazer) { const { data: c } = await sb.from("ia_cache").select("resultado").eq("painel_id", painel_id).eq("chave", chave).gte("criado_em", new Date(Date.now() - 30 * 864e5).toISOString()).maybeSingle(); if (c) return json({ ...c.resultado, _cache: true }) }
+  if (chave && !body.refazer) { const { data: c } = await sb.from("ia_cache").select("resultado").eq("painel_id", painel_id).eq("chave", chave).gte("criado_em", new Date(Date.now() - 30 * 864e5).toISOString()).maybeSingle(); if (c) { await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: "cache", custo_usd: 0, origem: "cache", ref: String(body.url).slice(0, 300), ms: Date.now() - t0, ok: true }); return json({ ...c.resultado, _cache: true, _uso: { custo_usd: 0, agente: "cache" } }) } }
   try {
     let r: any;
     if (acao === "paginas_edital") { const ps = await textoPdf(body.url); const re = new RegExp(body.filtro || "chassi|renavam|placa", "i"); return json({ total: ps.length, paginas: ps.map((t, i) => ({ n: i + 1, t })).filter(p => re.test(p.t)).map(p => ({ ...p, t: p.t.slice(0, body.max || 6000) })) }) }
-    if (acao === "lotes_edital") { const ps = await textoPdf(body.url); return json({ paginas: ps.length, ...lerAnexoLotes(ps) }) }
+    if (acao === "lotes_edital") { const ps = await textoPdf(body.url); const x = lerAnexoLotes(ps); await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: "sem IA (Anexo I)", custo_usd: 0, origem: "codigo", ref: String(body.url).slice(0, 300), ms: Date.now() - t0, ok: true }); return json({ paginas: ps.length, ...x, _uso: { custo_usd: 0, agente: "codigo" } }) }
     if (acao === "ler_edital") r = await lerEdital(body.url);
     else if (acao === "escolher_fipe") r = await escolherFipe(body.veiculo, body.ano, body.candidatos);
     else if (acao === "importar_lote") r = await importarLote(body.url);
     else if (acao === "analisar_fotos") r = await analisarFotos(body.imagens, body.modelo, body.ano, body.base);
     else if (acao === "mapear_planilha") r = await mapearPlanilha(body.cabecalhos, body.amostra);
     else return erro("Ação desconhecida");
-    await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: r.uso.modelo, tokens_in: r.uso.entrada, tokens_out: r.uso.saida, ms: Date.now() - t0, ok: true });
+    const custo = r.uso.agente === "codigo" ? 0 : custoUSD(r.uso.modelo, r.uso.entrada, r.uso.cache || 0, r.uso.saida);
+    r.uso.custo_usd = custo;
+    await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: r.uso.modelo, tokens_in: r.uso.entrada, tokens_cache: r.uso.cache || 0, tokens_out: r.uso.saida, custo_usd: custo, origem: r.uso.agente === "codigo" ? "codigo" : "ia", ref: String(body.ref || body.url || "").slice(0, 300) || null, ms: Date.now() - t0, ok: true });
     if (chave) await sb.from("ia_cache").upsert({ painel_id, chave, resultado: r.resultado, criado_em: new Date().toISOString() });
     return json({ ...r.resultado, _uso: r.uso });
   } catch (e) {
-    await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: MODEL, ms: Date.now() - t0, ok: false, erro: String((e as Error).message).slice(0, 300) });
+    await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: (AGENTES[acao] || {}).modelo || MODEL, custo_usd: 0, origem: "erro", ref: String(body.ref || body.url || "").slice(0, 300) || null, ms: Date.now() - t0, ok: false, erro: String((e as Error).message).slice(0, 300) });
     return erro((e as Error).message || "Falha", 502);
   }
 });
