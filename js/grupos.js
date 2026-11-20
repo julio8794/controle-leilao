@@ -10,7 +10,7 @@ function custasResumo(c){c=c||{};const p=[];
 function editaisHTML(){
   const lista=[...grupos].sort((a,b)=>(b.data_leilao||"").localeCompare(a.data_leilao||""));
   return `<div class="sec-t" style="margin-top:4px">📁 Grupos / editais <span style="font-weight:500;text-transform:none">· cada leilão com suas custas</span></div>
-  ${podeGerir()?`<button class="btn" id="gNovo" style="margin-bottom:12px">＋ Novo grupo / edital</button>`:""}
+  ${podeGerir()?`<div class="toolbar" style="margin:0 0 12px"><label class="btn">📎 Novo grupo a partir do PDF<input type="file" accept="application/pdf,.pdf" hidden id="gNovoPdf"></label><button class="btn ghost" id="gNovo">＋ Novo grupo manual</button></div>`:""}
   <div class="grid list">${lista.map(g=>{const ms=vehicles.filter(v=>v.grupoId===g.id);const vist=ms.filter(v=>vistProg(v).done>=CHECKS.length||v.statusVist==="vistoriada").length;const d=diasAte(g.data_leilao);
    const lim=ms.reduce((a,v)=>a+(num(v.vistoria&&v.vistoria.limite)||0),0);
    return `<div class="card gcard"><div class="vtop"><div><h3>${esc(g.nome)}</h3><div class="sub">${[g.cidade,g.leiloeiro,g.comitente].filter(Boolean).map(esc).join(" · ")||"—"}</div></div>
@@ -43,7 +43,8 @@ function renderGrupo(){
     <label>Nome do grupo<input data-g="nome" value="${esc(g.nome)}" placeholder="Ex.: Alagoinhas 25/11"></label><label>Cidade<input data-g="cidade" value="${esc(g.cidade||"")}"></label>
     <label>Leiloeiro<input data-g="leiloeiro" value="${esc(g.leiloeiro||"")}"></label><label>Comitente<input data-g="comitente" value="${esc(g.comitente||"")}" placeholder="Ex.: DETRAN-BA"></label>
     <label>Data do leilão<input type="date" data-g="data_leilao" value="${esc(g.data_leilao||"")}"></label><label>Link do edital (PDF)<input data-g="edital_url" value="${esc(g.edital_url||"")}" placeholder="https://…"></label></div>
-    <div class="toolbar" style="margin:10px 0 0">${g.edital_url?`<a class="btn ghost sm" style="text-decoration:none" href="${esc(g.edital_url)}" target="_blank" rel="noopener">📄 Abrir edital</a>`:""}${ro?"":`<button class="btn ghost sm" id="gIA">🤖 Ler edital com IA</button>`}</div><div id="gIASt"></div>
+    <div class="toolbar" style="margin:10px 0 0">${ro?"":`<label class="btn sm">📎 Enviar PDF do edital<input type="file" accept="application/pdf,.pdf" hidden id="gPdf"></label>`}${g.edital_url?`<a class="btn ghost sm" style="text-decoration:none" href="${esc(g.edital_url)}" target="_blank" rel="noopener">📄 Abrir edital</a>`:""}${ro?"":`<button class="btn ghost sm" id="gIA">🤖 Ler custas com IA</button>`}${!ro&&g.edital_url?`<button class="btn ghost sm" id="gLotes">📋 Ler lotes do Anexo</button>`:""}</div>
+    <div class="mini" id="gArq">${g.edital_nome?`📄 ${esc(g.edital_nome)} · `:""}${Array.isArray(g.lotes)&&g.lotes.length?`${g.lotes.length} lote(s) lidos do Anexo I${(g.lotes_falhas||[]).length?` · ⚠ ${g.lotes_falhas.length} linha(s) não lidas`:""}`:g.edital_url?"Lotes do Anexo ainda não lidos.":"Envie o PDF ou cole o link para o sistema ler custas e lotes."}</div><div id="gIASt"></div>
    </fieldset>
    <fieldset class="fin"><legend>💰 Custas do edital <span class="mini" style="margin:0">— usadas na calculadora de todas as motos do grupo</span></legend>
     <div class="f2">${CUSTAS_NUM.map(([k,l])=>`<label>${l}<input data-gc="${k}" inputmode="decimal" value="${esc(fmtIn(c[k]))}"></label>`).join("")}</div>
@@ -69,8 +70,9 @@ function renderGrupo(){
     if(b.dataset.gladd){c[b.dataset.gladd].push({nome:"",valor:0});renderGrupo();return}
     if(b.dataset.gldel){c[b.dataset.gldel].splice(+b.dataset.gi,1);renderGrupo();return}
     if(b.id==="gIA"){lerEditalIA(g);return}
+    if(b.id==="gLotes"){lerLotesUI(g,true);return}
     if(b.id==="gSalvar"){if(!String(g.nome||"").trim()){$("#gMsg").textContent="Dê um nome ao grupo.";return}
-      delete g._novo;const row={id:g.id,painel_id:painelId,nome:g.nome.trim(),cidade:g.cidade||null,leiloeiro:g.leiloeiro||null,comitente:g.comitente||null,data_leilao:g.data_leilao||null,edital_url:g.edital_url||null,custas:c,notas:g.notas||null,atualizado_em:new Date().toISOString()};
+      delete g._novo;const row={...(Array.isArray(g.lotes)?{lotes:g.lotes,lotes_lidos_em:g.lotes_lidos_em||new Date().toISOString()}:{}),...(g.edital_nome?{edital_nome:g.edital_nome}:{}),id:g.id,painel_id:painelId,nome:g.nome.trim(),cidade:g.cidade||null,leiloeiro:g.leiloeiro||null,comitente:g.comitente||null,data_leilao:g.data_leilao||null,edital_url:g.edital_url||null,custas:c,notas:g.notas||null,atualizado_em:new Date().toISOString()};
       const {error}=await sb.from("grupos").upsert(row);if(error){$("#gMsg").textContent="Erro: "+error.message;return}
       const i=grupos.findIndex(x=>x.id===g.id);if(i>=0)grupos[i]=row;else grupos.push(row);toast("Edital salvo ✓");fecharGrupo();return}
     if(b.id==="gDel"){const n=vehicles.filter(v=>v.grupoId===g.id).length;if(n){$("#gMsg").textContent=`Mova as ${n} moto(s) para outro grupo antes de excluir.`;return}

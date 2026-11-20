@@ -33,6 +33,7 @@ function revisarEdital(g){
     st.querySelectorAll("[data-edk]:checked").forEach(x=>{const k=x.dataset.edk;const v=r[k];
       if(["data_leilao","leiloeiro","comitente","cidade"].includes(k))g[k]=v.valor;else c[k]=v.valor;if(v.trecho)c.evidencias[k]=v.trecho+(v.pagina?` (pág. ${v.pagina})`:"")});
     st.querySelectorAll("[data-edt]:checked").forEach(x=>{const t=r.taxasFixas[+x.dataset.edt];if(!c.taxasFixas.some(y=>norm(y.nome)===norm(t.nome)))c.taxasFixas.push({nome:t.nome,valor:num(t.valor)});c.evidencias["taxa: "+t.nome]=t.trecho});
+    if(g._nomeAuto&&(g.cidade||g.comitente)){g.nome=[g.cidade||g.comitente,g.data_leilao?fmtD(g.data_leilao).slice(0,5):""].filter(Boolean).join(" ");delete g._nomeAuto}
     c.fonte=`Edital lido por IA em ${new Date().toLocaleDateString("pt-BR")}, revisado por ${meuNome||"você"}`;edRes=null;renderGrupo();toast("Aplicado. Confira e toque em 💾 Salvar edital")};
   $("#edDesc").onclick=()=>{edRes=null;st.innerHTML=""};
 }

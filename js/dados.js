@@ -149,3 +149,39 @@ document.addEventListener("change",async e=>{if(e.target.id!=="fipeSel"||!editin
 function autoCompletar(v){if(!v||!podeGerir())return;completarDados(v).then(()=>{if(editing&&editing.id===v.id)keepScroll(renderETab);else render()}).catch(()=>{})}
 document.addEventListener("click",async e=>{const b=e.target.closest("#avFipe");if(!b)return;const st=$("#avFipeSt");b.disabled=true;st.textContent="Consultando FIPE…";
   try{const f=await buscarFipe(av.modelo,av.ano);if(f.valor){av.fipe=String(Math.round(f.valor));av.fipeRef=f;renderBg()}else{st.textContent=f.duvida?"Várias versões possíveis: "+f.candidatos.map(c=>c.nome).slice(0,4).join(" · "):"⚠ "+(f.erro||"não encontrada")}}catch(err){st.textContent="⚠ "+err.message}b.disabled=false});
+
+/* ----- envio do PDF do edital ----- */
+const slugArq=s=>norm(String(s||"edital").replace(/\.pdf$/i,"")).replace(/ /g,"-").slice(0,60)||"edital";
+async function enviarEditalPDF(g,file){
+  const st=$("#gIASt");const say=h=>{if(st)st.innerHTML=h};
+  if(!file)return;
+  if(!/pdf$/i.test(file.type)&&!/\.pdf$/i.test(file.name))return say(`<div class="ia-box neg">Envie o edital em PDF.</div>`);
+  if(file.size>20e6)return say(`<div class="ia-box neg">PDF com ${(file.size/1e6).toFixed(1)} MB: o limite é 20 MB.</div>`);
+  say(`<div class="ia-box">⬆ Enviando ${esc(file.name)} (${(file.size/1e6).toFixed(1)} MB)…</div>`);
+  const path=`${painelId}/${g.id}/${Date.now()}-${slugArq(file.name)}.pdf`;
+  const up=await sb.storage.from("editais").upload(path,file,{contentType:"application/pdf",upsert:false});
+  if(up.error)return say(`<div class="ia-box"><b class="neg">Não consegui enviar o PDF.</b><div class="mini">${esc(up.error.message)}</div></div>`);
+  g.edital_url=sb.storage.from("editais").getPublicUrl(path).data.publicUrl;g.edital_nome=file.name;g.lotes=null;g.lotes_falhas=null;
+  if(!String(g.nome||"").trim()||g._nomeAuto){g.nome=slugArq(file.name).replace(/-/g," ");g._nomeAuto=true}
+  renderGrupo();
+  await lerLotesUI(g,true,true);
+  lerEditalIA(g);
+}
+async function lerLotesUI(g,forcar,emSeguida){
+  const a=$("#gArq");if(a)a.textContent="📋 Lendo a tabela de lotes do Anexo I…";
+  try{const ls=await lotesDoGrupo(g,forcar);g.lotes_lidos_em=new Date().toISOString();
+    const pat={};(ls||[]).forEach(l=>pat[l.patio]=(pat[l.patio]||0)+1);
+    const txt=ls&&ls.length?`📄 ${esc(g.edital_nome||"edital")} · <b>${ls.length} lote(s)</b> lidos do Anexo I (${Object.entries(pat).map(([p,n])=>esc(p)+": "+n).join(" · ")})${(g.lotes_falhas||[]).length?` · ⚠ ${g.lotes_falhas.length} linha(s) não reconhecidas`:""}`
+      :`⚠ Nenhum lote reconhecido no Anexo I. Se o PDF for escaneado (imagem), os lotes não podem ser lidos automaticamente.`;
+    const el=$("#gArq");if(el)el.innerHTML=txt;
+    const ms=vehicles.filter(v=>v.grupoId===g.id).length;
+    if(ls&&ls.length&&ms&&!emSeguida&&el)el.innerHTML+=` <button class="btn ghost sm" id="gConfAgora">🧩 Completar as ${ms} moto(s)</button>`;
+    return ls;
+  }catch(e){const el=$("#gArq");if(el)el.innerHTML=`<span class="neg">⚠ ${esc(e.message)}</span>`}
+}
+document.addEventListener("change",async e=>{
+  if(e.target.id==="gPdf"&&gEdit){const f=e.target.files[0];e.target.value="";await enviarEditalPDF(gEdit,f)}
+  if(e.target.id==="gNovoPdf"){const f=e.target.files[0];e.target.value="";if(!f)return;abrirGrupo(null);await enviarEditalPDF(gEdit,f)}
+});
+document.addEventListener("click",async e=>{const b=e.target.closest("#gConfAgora");if(!b||!gEdit)return;b.disabled=true;
+  if(grupos.some(x=>x.id===gEdit.id)){const r=await completarGrupo(gEdit.id,b);b.textContent=`✓ ${r.n} conferida(s)${r.div?` · ${r.div} a conferir`:""}`}else b.textContent="Salve o edital primeiro"});
