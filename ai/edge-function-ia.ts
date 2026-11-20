@@ -108,22 +108,29 @@ async function textoPdf(url: string) {
 function lerAnexoLotes(paginas: string[]) {
   const COMB = "ALCOOL\\/GASOLINA\\/\\s?GNV|GASOLINA\\/ALCOOL\\/\\s?GNV|ALCOOL\\/GASOLINA|GASOLINA\\/ALCOOL|GASOLINA\\/ELETRICO|GASOLINA|ALCOOL|ETANOL|FLEX|DIESEL|ELETRICO|ELÉTRICO|GNV|N\\/I";
   const out: any[] = [], falhas: any[] = []; let patio = "";
+  // pátio = linha imediatamente antes do cabeçalho "LOTE PLACA ..." (classificações em várias linhas não contam)
+  const linhas = paginas.join("\n").split("\n").map(l => l.trim()).filter(Boolean);
+  const CAB = /^LOTE\s+PLACA\b/i, LIXO = /EDITAL DE LEILÃO|^TAXA\/|^DESALIE|^NAÇÃO$|^CLASSIFICAÇÃO$|^AVALIAÇÃ|^O\/LANCE|^MÍNIMO$|^ANEXO\b/i;
   let corpo = "";
-  for (const l of paginas.join("\n").split("\n")) {
-    const m = l.trim(); if (/^ANEXO\b/i.test(m)) continue;
-    if (/^[A-ZÀ-Ú\/ ]{4,40}$/.test(m) && !/^(VEÍCULO|VEICULO|CONSERVADO|SUCATA|SIM|NÃO|NAO|LOTE|PLACA|O\/LANCE|MÍNIMO|MINIMO|NAÇÃO|CLASSIFICAÇÃO|AVALIAÇÃ|TAXA\/|DESALIE)/.test(m) && !/PÁGINA|EDITAL/.test(m)) { corpo += `\n@@PATIO ${m}\n`; continue }
-    if (/EDITAL DE LEILÃO|^LOTE PLACA|^TAXA\/|^DESALIE|^NAÇÃO|^CLASSIFICAÇÃO|^AVALIAÇÃ|^O\/LANCE|^MÍNIMO$/.test(m)) continue;
+  for (let i = 0; i < linhas.length; i++) {
+    const m = linhas[i];
+    if (CAB.test(m)) continue;
+    let j = i + 1; while (j < linhas.length && LIXO.test(linhas[j])) j++;
+    if (j < linhas.length && CAB.test(linhas[j]) && !/^\d{4}\s/.test(m) && !/R\$/.test(m) && !LIXO.test(m)) { corpo += `\n@@PATIO ${m.replace(/^ANEXO\s+[IVX]+\s*[–-]?\s*/i, "")}@@\n`; continue }
+    if (LIXO.test(m)) continue;
     corpo += " " + m;
   }
-  const partes = corpo.split(/(?=@@PATIO )|(?=(?:^|\s)\d{4}\s+(?:[A-Z]{3}\d[A-Z0-9]\d{2}|\d\s+EMPLAC|SEM\s+PLACA|N\/I)\s)/);
-  const re = new RegExp(`^\\s*(\\d{4})\\s+([A-Z]{3}\\d[A-Z0-9]\\d{2}|\\d\\s+EMPLAC|SEM\\s+PLACA|N\\/I)\\s+([A-HJ-NPR-Z0-9]{17}|N\\/I)\\s+(.+?)\\s+(\\d{6,11}|N\\/I)\\s+([A-Z]{2}|N\\/I)\\s+(.+?)\\s+(\\d{4}\\/\\d{4}|N\\/I)\\s+(${COMB})\\s+(.+?)\\s+(SIM|NÃO|NAO)\\s+(.+?)\\s+R\\$\\s*([\\d.]+,\\d{2})`, "i");
+  const PLACA = "[A-Z]{3}-?\\d[A-Z0-9]\\d{2}|(?:S\\/\\s?)?\\d?\\s*EMPLAC\\S*|S\\/\\s?PLACA|SEM\\s+PLACA|N\\/I";
+  const partes = corpo.split(new RegExp(`(?=@@PATIO )|(?=(?:^|\\s)\\d{4}\\s+(?:${PLACA})\\s)`));
+  const re = new RegExp(`^\\s*(\\d{4})\\s+(${PLACA})\\s+((?:[A-HJ-NPR-Z0-9]\\s?){16}[A-HJ-NPR-Z0-9]|N\\/I)\\s+(.+?)\\s+(\\d{6,11}|N\\/I)\\s+([A-Z]{2}|N\\/I)\\s+(.+?)\\s+(\\d{4}\\/\\d{4}|N\\/I)\\s+(${COMB})\\s+(.+?)\\s+(SIM|NÃO|NAO)\\s+(.+?)\\s+R\\$\\s*([\\d.]+,\\d{2})`, "i");
   for (const p of partes) {
     const s = p.replace(/\s+/g, " ").trim(); if (!s) continue;
-    if (s.startsWith("@@PATIO ")) { patio = s.slice(8).replace(/^.*R\$\s*[\d.,]+\s*/, "").trim(); continue }
-    if (!/^\d{4}\s/.test(s)) continue;
-    const m = s.match(re); if (!m) { falhas.push({ patio, texto: s.slice(0, 260) }); continue }
+    let t = s;
+    if (t.startsWith("@@PATIO ")) { const k = t.indexOf("@@", 8); patio = t.slice(8, k > 0 ? k : undefined).trim(); t = k > 0 ? t.slice(k + 2).trim() : ""; if (!t) continue }
+    if (!/^\d{4}\s/.test(t)) continue;
+    const m = t.match(re); if (!m) { falhas.push({ patio, texto: t.slice(0, 260) }); continue }
     const [, lote, placa, chassi, modelo, renavam, uf, cor, ano, comb, motor, desal, classif, valor] = m;
-    out.push({ patio, lote, placa: /EMPLAC|SEM|N\/I/.test(placa) ? "" : placa, semPlaca: /EMPLAC|SEM/.test(placa), chassi: chassi === "N/I" ? "" : chassi, modelo: modelo.trim(), renavam: renavam === "N/I" ? "" : renavam, uf: uf === "N/I" ? "" : uf, cor: cor.trim(), ano: ano === "N/I" ? "" : ano, combustivel: comb.replace(/\s+/g, ""), motor: motor.replace(/\s+/g, ""), desalienacao: /SIM/i.test(desal), classificacao: classif.trim(), lanceMin: Number(valor.replace(/\./g, "").replace(",", ".")), linha: s.slice(0, 300) });
+    out.push({ patio, lote, placa: /EMPLAC|PLACA|N\/I/.test(placa) ? "" : placa.replace("-", ""), semPlaca: /EMPLAC|PLACA/.test(placa), chassi: chassi === "N/I" ? "" : chassi.replace(/\s+/g, ""), modelo: modelo.trim(), renavam: renavam === "N/I" ? "" : renavam, uf: uf === "N/I" ? "" : uf, cor: cor.trim(), ano: ano === "N/I" ? "" : ano, combustivel: comb.replace(/\s+/g, ""), motor: motor.replace(/\s+/g, ""), desalienacao: /SIM/i.test(desal), classificacao: classif.trim(), lanceMin: Number(valor.replace(/\./g, "").replace(",", ".")), linha: t.slice(0, 300) });
   }
   return { lotes: out, falhas };
 }
@@ -190,7 +197,11 @@ function loteEstruturado(html: string, url: string) {
   if (!L || (L.slug && slug && L.slug !== slug)) return null;
   const v = (x: any) => x === null || x === undefined || x === "" ? null : x;
   const c = (valor: any) => ({ valor: v(valor), trecho: v(valor) == null ? null : String(valor), pagina: null, verificado: v(valor) != null, fonte: "registro do lote na página" });
-  const titulo = String(L.title || ""); const mt = titulo.match(/^(.*?)\s*([A-Z0-9]+\/\S.*?)\s+-\s+(\d{4}\/\d{4})\s*$/);
+  const titulo = String(L.title || "").replace(/\s+/g, " ").trim();
+  const anoT = (titulo.match(/(\d{4}\/\d{4})\s*$/) || [])[1] || null; const semAno = titulo.replace(/\s+-\s+\d{4}\/\d{4}\s*$/, "");
+  const kb = semAno.indexOf("/"); let modeloT: string | null = null, situT: string | null = null;
+  if (kb > 0) { const antes = semAno.slice(0, kb).trimEnd(); const w = antes.lastIndexOf(" "); modeloT = (antes.slice(w + 1) + "/" + semAno.slice(kb + 1).trim()).trim(); situT = antes.slice(0, w + 1).trim() || null }
+  const mt = modeloT ? [titulo, situT, modeloT, anoT] : null;
   const n = (x: any) => { const k = Number(String(x ?? "").replace(/[^\d.,]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".")); return isFinite(k) && k > 0 ? k : null };
   const lances = (L.bids || []).map((b: any) => n(b.value ?? b.amount ?? b.bid)).filter(Boolean) as number[];
   const A = L.auction || {}; const datas = Object.entries(A).filter(([k, x]) => /date|closing|opening|start|end/i.test(k) && typeof x === "string" && /^\d{4}-\d{2}-\d{2}/.test(x as string)).map(([, x]) => String(x).slice(0, 10)).sort();
@@ -288,7 +299,7 @@ Deno.serve(async (req) => {
   const { count } = await sb.from("ia_uso").select("id", { count: "exact", head: true }).eq("painel_id", painel_id).eq("origem", "ia").gte("criado_em", hoje.toISOString());
   if ((count || 0) >= LIMITE) return erro(`Limite diário de ${LIMITE} usos da IA atingido`, 429);
   const t0 = Date.now(); AGENTE_ATUAL = acao;
-  const chave = ["ler_edital", "importar_lote"].includes(acao) && body.url ? acao + ":v3:" + body.url : null;
+  const chave = ["ler_edital", "importar_lote"].includes(acao) && body.url ? acao + ":v4:" + body.url : null;
   if (chave && !body.refazer) { const { data: c } = await sb.from("ia_cache").select("resultado").eq("painel_id", painel_id).eq("chave", chave).gte("criado_em", new Date(Date.now() - 30 * 864e5).toISOString()).maybeSingle(); if (c) { await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: "cache", custo_usd: 0, origem: "cache", ref: String(body.url).slice(0, 300), ms: Date.now() - t0, ok: true }); return json({ ...c.resultado, _cache: true, _uso: { custo_usd: 0, agente: "cache" } }) } }
   try {
     let r: any;

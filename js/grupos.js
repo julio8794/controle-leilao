@@ -8,7 +8,7 @@ function custasResumo(c){c=c||{};const p=[];
   const dc=(c.docs||[]).reduce((a,t)=>a+num(t.valor),0);if(dc)p.push(`documentação ~${brl(dc)}`);
   return p.length?p:["custas não preenchidas"]}
 function editaisHTML(){
-  const lista=[...grupos].sort((a,b)=>(b.data_leilao||"").localeCompare(a.data_leilao||""));
+  const lista=grupos.filter(g=>!g._pendente).sort((a,b)=>(b.data_leilao||"").localeCompare(a.data_leilao||""));
   return `<div class="sec-t" style="margin-top:4px">📁 Grupos / editais <span style="font-weight:500;text-transform:none">· cada leilão com suas custas</span></div>
   ${podeGerir()?`<div class="toolbar" style="margin:0 0 12px"><label class="btn">📎 Novo grupo a partir do PDF<input type="file" accept="application/pdf,.pdf" hidden id="gNovoPdf"></label><button class="btn ghost" id="gNovo">＋ Novo grupo manual</button></div>`:""}
   <div class="grid list">${lista.map(g=>{const ms=vehicles.filter(v=>v.grupoId===g.id);const vist=ms.filter(v=>vistProg(v).done>=CHECKS.length||v.statusVist==="vistoriada").length;const d=diasAte(g.data_leilao);

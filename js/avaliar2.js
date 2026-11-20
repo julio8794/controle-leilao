@@ -6,6 +6,7 @@ const chassisDe=ls=>new Set((ls||[]).map(l=>norm(l.chassi)).filter(c=>c.length>=
 function sobreposicao(a,b){const A=chassisDe(a),B=chassisDe(b);if(!A.size||!B.size)return 0;let n=0;A.forEach(c=>{if(B.has(c))n++});return n/Math.min(A.size,B.size)}
 /* mesmo edital = mesmo link, link alternativo já visto, ou mesmos chassis no Anexo I (o leiloeiro publica o mesmo edital em arquivos diferentes) */
 function gruposDoEdital(ed,lotes){return grupos.filter(g=>urlEdital(g.edital_url)===urlEdital(ed)||((g.custas||{}).editalAliases||[]).some(u=>urlEdital(u)===urlEdital(ed))||(lotes&&lotes.length&&sobreposicao(g.lotes,lotes)>=.8))}
+async function gravarGrupoPendente(g){if(!g||!g._pendente)return;const row={...g};delete row._pendente;const {error}=await sb.from("grupos").upsert(row);if(error)throw new Error("Não consegui criar o grupo: "+error.message);delete g._pendente;toast("Grupo "+g.nome+" criado ✓")}
 async function lembrarAlias(gs,ed){for(const g of gs){if(urlEdital(g.edital_url)===urlEdital(ed))continue;g.custas=g.custas||{};const al=g.custas.editalAliases||[];if(al.some(u=>urlEdital(u)===urlEdital(ed)))continue;al.push(ed);g.custas.editalAliases=al;try{await sb.from("grupos").update({custas:g.custas}).eq("id",g.id)}catch(e){}}}
 const mesmaCidade=(g,c)=>{const a=norm(g.cidade||g.nome||""),b=norm(c);return !!b&&(a===b||a.startsWith(b+" ")||a.startsWith(b))};
 
@@ -27,7 +28,7 @@ function casarLoteSite(d,lotes,edUrl){
 }
 /* cria/acha o grupo do edital + cidade */
 async function grupoParaLote(edUrl,cidade,base,st){
-  const mesmos=gruposDoEdital(edUrl,base.lotes);await lembrarAlias(mesmos,edUrl);
+  const mesmos=gruposDoEdital(edUrl,base.lotes);await lembrarAlias(mesmos.filter(g=>!g._pendente),edUrl);
   const ja=mesmos.find(g=>mesmaCidade(g,cidade))||(!cidade&&mesmos[0]);if(ja)return {g:ja,acao:"vinculado"};
   if(!podeGerir())return {g:null,acao:"sem permissão para criar grupo"};
   let custas,extra={};
@@ -40,12 +41,12 @@ async function grupoParaLote(edUrl,cidade,base,st){
       custas.fonte=`Edital lido por IA em ${new Date().toLocaleDateString("pt-BR")} na importação por link (só itens conferidos no texto). Revise em 📁 Editais.`}catch(e){custas.fonte="⚠ Custas não lidas: "+e.message}}
   const nome=[cidade||"Edital",extra.data_leilao?fmtD(extra.data_leilao).slice(0,5):""].filter(Boolean).join(" ");
   const row={id:crypto.randomUUID?crypto.randomUUID():uid(),painel_id:painelId,nome,cidade:cidade||null,leiloeiro:extra.leiloeiro||null,comitente:extra.comitente||null,data_leilao:extra.data_leilao||null,edital_url:edUrl,edital_nome:extra.edital_nome||null,custas,lotes:extra.lotes||null,lotes_lidos_em:new Date().toISOString(),atualizado_em:new Date().toISOString()};
-  const {error}=await sb.from("grupos").upsert(row);if(error)throw new Error("Não consegui criar o grupo: "+error.message);
-  grupos.push(row);return {g:row,acao:mesmos.length?"novo grupo (mesmo edital, outra cidade)":"novo grupo (edital novo)"};
+  row._pendente=true;grupos.push(row);
+  return {g:row,acao:(mesmos.length?"grupo novo (mesmo edital, outra cidade)":"grupo novo (edital novo)")+" — criado ao salvar"};
 }
 async function importarPorLink(){
   const st=$("#avLinkSt");const say=h=>{if(st)st.innerHTML=h};
-  const url=String(av.link||"").trim();if(!/^https?:\/\//.test(url))return say(`<span class="neg">Cole o link da página do lote.</span>`);
+  const url=String(av.link||"").trim();delete av._erro;if(!/^https?:\/\//.test(url)){av._erro="Link inválido";return say(`<span class="neg">Cole o link da página do lote.</span>`)}
   const b=$("#avImp");if(b)b.disabled=true;
   try{
     say("🌐 Lendo a página do lote…");const r=await chamarIA("importar_lote",{url});
@@ -69,7 +70,7 @@ async function importarPorLink(){
     if(av.modelo&&av.ano){say("💲 Consultando FIPE oficial…");try{const f=await buscarFipe(av.modelo,av.ano);if(f.valor){av.fipe=String(Math.round(f.valor));av.fipeRef=f}else if(f.duvida)av.fipeCands=f.candidatos}catch(e){}}
     av.importadoEm=new Date().toISOString();renderBg();
     const s2=$("#avLinkSt");if(s2)s2.innerHTML="✅ Importado. Confira abaixo e toque em 🤖 Analisar fotos.";
-  }catch(e){say(`<span class="neg">⚠ ${esc(e.message)}</span>`)}finally{const b2=$("#avImp");if(b2)b2.disabled=false}
+  }catch(e){av._erro=e.message||String(e);console.error("importar lote",url,e);say(`<span class="neg">⚠ ${esc(av._erro)}</span>`)}finally{const b2=$("#avImp");if(b2)b2.disabled=false}
 }
 async function vincularGrupo(ed,L,lotes,say){
   const cidade=L?cidadeDoPatio(L.patio):"";
@@ -111,8 +112,10 @@ avaliarHTML=function(){
    <div class="links">${avLinks.map((u,i)=>`<div class="lrow"><span class="lnum">${i+1}</span><input data-lk="${i}" placeholder="https://…/lotes/230-006-…" value="${esc(u)}" ${avOcupado?"disabled":""}>${avLinks.length>1?`<button class="lx" data-lkdel="${i}" aria-label="Remover janela" ${avOcupado?"disabled":""}>✕</button>`:""}</div>`).join("")}</div>
    <div class="toolbar" style="margin:8px 0 0">${avLinks.length<MAX_LINKS?`<button class="btn ghost sm" id="avAddLink" ${avOcupado?"disabled":""}>＋ Outro link</button>`:""}<button class="btn" id="avImp" ${avOcupado?"disabled":""}>${avOcupado?"⏳ Importando…":`Importar ${linksValidos().length>1?linksValidos().length+" lotes":""}`}</button></div>
    <div class="mini" id="avLinkSt">${avOcupado?"":avMsg}</div></div>
-  ${avFila.length>1?`<div class="fila">${avFila.map((x,i)=>`<button class="fchip ${x===av?"on":""} f-${x._st||"fila"}" data-fila="${i}"><b>${i+1}</b> ${esc((x.modelo||slugLote(x.link)||"lote").replace(/^[^\/]*\//,"").slice(0,22))}<small>${x._st==="lendo"?"⏳":x._st==="erro"?"⚠":x.vidSalvo?"💾":x.result?"🤖":x.importadoEm?"✓":"…"}</small></button>`).join("")}</div>
+  ${avFila.length>1?`<div class="fila">${avFila.map((x,i)=>`<span class="fwrap"><button class="fchip ${x===av?"on":""} f-${x._st||"fila"}" data-fila="${i}" title="${esc(x._erro||x.link)}"><b>${i+1}</b> ${esc((x.modelo||slugLote(x.link)||"lote").replace(/^[^\/]*\//,"").slice(0,22))}<small>${x._st==="lendo"?"⏳":x._st==="erro"?"⚠":x.vidSalvo?"💾":x.result?"🤖":x.importadoEm?"✓":"…"}</small></button>${avOcupado?"":`<button class="fdel" data-filadel="${i}" aria-label="Excluir lote ${i+1}">✕</button>`}</span>`).join("")}</div>
+   ${!avOcupado&&avFila.some(x=>x._st==="erro")?`<div class="toolbar" style="margin:0 0 6px"><button class="btn ghost sm" id="avRetryErr">🔄 Tentar de novo os com erro (${avFila.filter(x=>x._st==="erro").length})</button><button class="btn ghost sm" id="avDelErr">🗑 Remover os com erro</button></div>`:""}
    ${nOk>1&&!avOcupado?`<div class="toolbar" style="margin:0 0 6px"><button class="btn ghost sm" id="avAllAI">🤖 Analisar fotos de todos (${nOk})</button><button class="btn ghost sm" id="avAllSave">💾 Salvar todos no controle</button></div>`:""}`:""}
+  ${av._erro&&!avOcupado?`<div class="ia-box"><b class="neg">⚠ Não consegui importar este lote</b><div class="mini">${esc(av._erro)}</div><div class="mini" style="word-break:break-all">${esc(av.link||"")}</div><div class="toolbar" style="margin:8px 0 0"><button class="btn sm" id="avRetry1">🔄 Tentar de novo</button>${avFila.length>1?`<button class="btn ghost sm" data-filadel="${avFila.indexOf(av)}">🗑 Excluir da lista</button>`:""}</div></div>`:""}
   ${av.jaExiste?`<div class="note">Este lote já está no controle (${esc(av.jaExiste)}). Salvar atualiza a moto existente, sem duplicar.</div>`:""}
   ${vinculoHTML()}
   ${av.importadoEm?`<div class="sec-t">Números do arremate</div>
@@ -142,6 +145,10 @@ bindAv=function(){
     if(b.id==="avAddLink"){avLinks.push("");renderBg();setTimeout(()=>{const x=document.querySelector(`[data-lk="${avLinks.length-1}"]`);if(x)x.focus()},30);return}
     if(b.dataset.lkdel!=null){avLinks.splice(+b.dataset.lkdel,1);if(!avLinks.length)avLinks=[""];renderBg();return}
     if(b.dataset.fila!=null){av=avFila[+b.dataset.fila];renderBg();return}
+    if(b.dataset.filadel!=null){const i=+b.dataset.filadel;const x=avFila.splice(i,1)[0];if(x){avLinks=avLinks.filter(u=>urlEdital(u)!==urlEdital(x.link));if(!avLinks.length)avLinks=[""]}if(av===x)av=avFila[Math.min(i,avFila.length-1)]||newAv();if(avFila.length===1)av=avFila[0];avMsg=avFila.length?`${avFila.length} lote(s) na lista.`:"";renderBg();return}
+    if(b.id==="avDelErr"){const fora=avFila.filter(x=>x._st==="erro");avFila=avFila.filter(x=>x._st!=="erro");avLinks=avLinks.filter(u=>!fora.some(x=>urlEdital(x.link)===urlEdital(u)));if(!avLinks.length)avLinks=[""];if(!avFila.includes(av))av=avFila[0]||newAv();avMsg=`${fora.length} lote(s) com erro removido(s).`;renderBg();return}
+    if(b.id==="avRetryErr"){reimportar(avFila.filter(x=>x._st==="erro"));return}
+    if(b.id==="avRetry1"){reimportar([av]);return}
     if(b.id==="avAllAI"){emLote("ai");return}
     if(b.id==="avAllSave"){emLote("save");return}
     if(b.dataset.patio!=null){const L=av.edital.duvida[+b.dataset.patio];av.edital.duvida=null;await vincularGrupo(av.edital.url,L,av.edital.lotes,t=>{const s=$("#avLinkSt");if(s)s.textContent=t});renderBg();return}
@@ -149,13 +156,14 @@ bindAv=function(){
     if(b.dataset.idel!=null){av.itens.splice(+b.dataset.idel,1);renderAvRes();return}
     if(b.dataset.iadd){av.itens.push({categoria:b.dataset.iadd,peca:"Novo item",servico:"",gravidade:"media",min:0,max:0,valor:"",evidencia:"adicionado manualmente",on:true,edit:true});renderAvRes();return}
     if(b.id==="avGo"){runAI();return}
-    if(b.id==="avSave"){salvarAvaliacaoLink();return}
+    if(b.id==="avSave"){await salvarAvaliacaoLink();return}
     if(b.id==="avNew"){av=newAv();avFila=[];avLinks=[""];renderBg();return}};
   m.onkeydown=e=>{if(e.target.dataset.lk!=null&&e.key==="Enter"){e.preventDefault();importarFila()}};
   renderAvRes();
 };
-function salvarAvaliacaoLink(){
+async function salvarAvaliacaoLink(){
   const gs=$("#avGr");if(gs)av.grupoId=gs.value;
+  const gp=grupos.find(g=>g.id===av.grupoId);if(gp&&gp._pendente){try{await gravarGrupoPendente(gp)}catch(e){toast("⚠ "+e.message);return}}
   const antes=av.vid;saveAv();const v=vehicles.find(x=>x.id===av.vid);if(!v)return;
   const L=av.anexo||{},d=(av.site||{}).dados||{};
   const put=(k,val)=>{if(temV(val)&&!temV(v[k]))v[k]=val};
@@ -179,6 +187,13 @@ async function importarFila(){
 async function emLote(tipo){
   if(avOcupado)return;avOcupado=true;const alvo=avFila.filter(x=>x.importadoEm);let n=0;
   for(const x of alvo){av=x;renderBg();const s=$("#avLinkSt");n++;if(s)s.textContent=`${tipo==="ai"?"🤖 Analisando":"💾 Salvando"} ${n} de ${alvo.length}…`;
-    try{if(tipo==="ai"){if(!x.result)await runAI()}else{if(grupos.length&&!x.grupoId){x._st="erro";continue}salvarAvaliacaoLink();x.vidSalvo=x.vid}}catch(e){x._st="erro"}}
+    try{if(tipo==="ai"){if(!x.result)await runAI()}else{if(grupos.length&&!x.grupoId){x._st="erro";x._erro="Sem grupo / edital: escolha o grupo deste lote";continue}await salvarAvaliacaoLink();x.vidSalvo=x.vid}}catch(e){x._st="erro";x._erro=e.message}}
   avOcupado=false;avMsg=tipo==="ai"?`✅ Fotos analisadas em ${alvo.length} lote(s).`:`💾 ${alvo.filter(x=>x.vidSalvo).length} lote(s) salvos no controle.${alvo.some(x=>!x.vidSalvo)?" Os marcados com ⚠ ficaram sem grupo.":""}`;renderBg();
+}
+
+async function reimportar(lista){
+  if(avOcupado||!lista.length)return;avOcupado=true;let i=0;
+  for(const x of lista){i++;av=x;x._st="lendo";delete x._erro;renderBg();const s=$("#avLinkSt");if(s)s.textContent=`Tentando de novo ${i} de ${lista.length}…`;
+    try{await importarPorLink()}catch(e){x._erro=e.message}x._st=x.importadoEm?"ok":"erro"}
+  avOcupado=false;const ok=lista.filter(x=>x.importadoEm).length;avMsg=`🔄 ${ok} de ${lista.length} importado(s) na nova tentativa.`;renderBg();
 }

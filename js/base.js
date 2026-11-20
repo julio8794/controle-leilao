@@ -165,7 +165,7 @@ async function trocarPainel(id){
     lsSave();if(!editing&&tab!=="avaliar"&&tab!=="config")render();
   }).on("postgres_changes",{event:"*",schema:"public",table:"grupos",filter:"painel_id=eq."+id},pl=>{
     if(painelId!==id)return;if(pl.eventType==="DELETE")grupos=grupos.filter(g=>g.id!==(pl.old&&pl.old.id));
-    else{const g=pl.new;const i=grupos.findIndex(x=>x.id===g.id);if(i>=0)grupos[i]=g;else grupos.push(g)}
+    else{const g=pl.new;const i=grupos.findIndex(x=>x.id===g.id);if(i>=0)grupos[i]={...grupos[i],...g,lotes:Array.isArray(g.lotes)&&g.lotes.length?g.lotes:grupos[i].lotes,_pendente:undefined};else grupos.push(g)}
     if(!editing&&tab!=="avaliar"&&tab!=="config")render();
   }).subscribe();
   flush();

@@ -308,3 +308,7 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 .fila{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
 .fchip{flex:none;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--txt)}
 .fchip b{font-size:11px;color:var(--mut)}.fchip.on{border-color:var(--acc);background:rgba(245,165,36,.12)}.fchip.f-erro{border-color:var(--bad)}
+
+.fwrap{position:relative;flex:none;display:inline-flex}.fwrap .fchip{padding-right:30px}
+.fdel{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;border:0;background:var(--panel2);color:var(--mut);font-size:11px;line-height:22px;padding:0}
+.fdel:hover{background:var(--bad);color:#fff}
