@@ -93,7 +93,8 @@ async function completarDados(v,op={}){
       if(r.fotos&&r.fotos.length&&(!v.fotosRef||(r.estruturado&&daWeb))){const novas=r.fotos.filter(u=>!/comitente/i.test(u)).slice(0,8);if(JSON.stringify(novas)!==JSON.stringify(v.fotosRef)){if(v.fotosRef)log.push(`Fotos atualizadas: ${novas.length} do próprio lote`);v.fotosRef=novas}}}catch(e){log.push("Site: "+e.message)}}
   // 3) mescla com regras
   const E=fontes.edital||{},S=fontes.site||{};const itens=[];
-  CAMPOS_CONF.forEach(([k,l])=>{const atual=v[k],ed=E[k],si=S[k];const it={campo:k,nome:l,sistema:atual??"",edital:ed??"",site:si??""};
+  const mascarado=x=>typeof x==="string"&&/\*|SUPRIMID/.test(x);
+  CAMPOS_CONF.forEach(([k,l])=>{const atual=v[k],ed=mascarado(E[k])?"":E[k],si=S[k];const it={campo:k,nome:l,sistema:atual??"",edital:ed??"",site:si??""};
     if(temV(ed)&&temV(si)&&!(k==="placa"&&String(si).length<7)&&!iguais(ed,si,k))it.alerta=`edital e site divergem`;
     if(!temV(atual)){const val=temV(ed)?ed:si;if(temV(val)){v[k]=k==="lanceMin"?num(val):val;it.status="preenchido";it.fonte=temV(ed)?"edital":"site"}else it.status="falta"}
     else if(temV(ed)&&!iguais(atual,ed,k)){if(ESTRUT.includes(k)&&!op.manter){v[k]=k==="lanceMin"?num(ed):ed;it.status="corrigido";it.antes=atual;it.fonte="edital"}else{it.status="divergente";it.fonte="edital"}}

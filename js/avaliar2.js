@@ -78,7 +78,7 @@ async function vincularGrupo(ed,L,lotes,say){
   if(r.g){av.grupoId=r.g.id;const c=r.g.custas||{};av.comissaoPct=num(c.comissaoPct)+num(c.taxaAdmPct);av.taxas=String((c.taxasFixas||[]).reduce((a,t)=>a+num(t.valor),0)+(c.docs||[]).reduce((a,t)=>a+num(t.valor),0));
     if(c.margemPct!=null)av.margem=num(c.margemPct);if(c.contingPct!=null)av.conting=num(c.contingPct)}
   if(L){const d=av.site.dados;av.anexo=L;["modelo","ano"].forEach(k=>{if(!av[k])av[k]=L[k]});if(!av.placa)av.placa=L.placa;if(!num(av.lanceAtual))av.lanceAtual=String(L.lanceMin);
-    av.diverg=[["Modelo",d.modelo,L.modelo,"modelo"],["Ano",d.ano,L.ano,"ano"],["Cor",d.cor,L.cor,"cor"],["Lance mínimo",d.lanceMin,L.lanceMin,"lanceMin"],["Placa",d.placa,L.placa,"placa"],["Chassi",d.chassi,L.chassi,"chassi"],["Renavam",d.renavam,L.renavam,"renavam"],["Nº do motor",d.motor,L.motor,"motor"],["Combustível",d.combustivel,L.combustivel,"combustivel"]].filter(([n,a,b,k])=>temV(a)&&temV(b)&&!iguais(a,b,k)).map(([n,a,b])=>({n,site:a,edital:b}))}
+    av.diverg=[["Modelo",d.modelo,L.modelo,"modelo"],["Ano",d.ano,L.ano,"ano"],["Cor",d.cor,L.cor,"cor"],["Lance mínimo",d.lanceMin,L.lanceMin,"lanceMin"],["Placa",d.placa,L.placa,"placa"],["Chassi",d.chassi,L.chassi,"chassi"],["Renavam",d.renavam,L.renavam,"renavam"],["Nº do motor",d.motor,L.motor,"motor"],["Combustível",d.combustivel,L.combustivel,"combustivel"]].filter(([n,a,b,k])=>temV(a)&&temV(b)&&!/\*|SUPRIMID/.test(String(b))&&!iguais(a,b,k)).map(([n,a,b])=>({n,site:a,edital:b}))}
 }
 function vinculoHTML(){
   if(!av.importadoEm&&!av.edital)return "";
@@ -89,7 +89,7 @@ function vinculoHTML(){
    <div class="vinc-g">
     <div><div class="sec-t" style="margin:8px 0 4px">🌐 Site do leiloeiro</div>${lin("Modelo",d.modelo)}${lin("Ano",d.ano)}${lin("Cor",d.cor)}${lin("Placa",d.placa)}${lin("Chassi",d.chassi)}${lin("Renavam",d.renavam)}${lin("Motor",d.motor)}${lin("Combustível",d.combustivel)}${lin("Cidade",[d.cidade,d.uf].filter(Boolean).join("/"))}${lin("Lote",d.lote)}${lin("Lance mínimo",d.lanceMin?brl(num(d.lanceMin)):"")}${lin("Lance atual",d.lanceAtual?brl(num(d.lanceAtual)):"")}${lin("Data",d.dataLeilao?fmtD(d.dataLeilao):"")}${lin("Situação",d.situacao)}${lin("Observações",d.obs)}</div>
     <div><div class="sec-t" style="margin:8px 0 4px">📄 Edital ${L?`· ${esc(L.patio)} lote ${esc(L.lote)}`:""}</div>
-     ${L?`${lin("Placa",L.placa||(L.semPlaca?"sem placa":""))}${lin("Chassi",L.chassi)}${lin("Renavam",L.renavam)}${lin("Motor",L.motor)}${lin("Combustível",L.combustivel)}${lin("Classificação",L.classificacao)}${lin("Lance mínimo",brl(L.lanceMin))}${L.desalienacao?`<div class="mini">⚠ Taxa/desalienação a pagar</div>`:""}`
+     ${L?`${lin("Placa",L.placa||(L.semPlaca?"sem placa":""))}${lin("Chassi",L.chassi)}${lin("Renavam",L.renavam)}${L.sufixo?lin("Tipo de lote",L.sufixo):""}${L.suprimido?`<div class="mini">ℹ O edital suprime parte dos dados deste lote; vale o que está no site.</div>`:""}${lin("Motor",L.motor)}${lin("Combustível",L.combustivel)}${lin("Classificação",L.classificacao)}${lin("Lance mínimo",brl(L.lanceMin))}${L.desalienacao?`<div class="mini">⚠ Taxa/desalienação a pagar</div>`:""}`
       :E.duvida?`<div class="mini">O lote aparece em mais de um pátio. Qual é?</div>${E.duvida.map((l,i)=>`<button class="btn ghost sm" style="margin:4px 4px 0 0" data-patio="${i}">${esc(l.patio)} · ${esc(l.modelo)} · ${brl(l.lanceMin)}</button>`).join("")}`
       :`<div class="mini">${esc(E.aviso||(E.url?"Lote não encontrado no Anexo I.":"Sem edital."))}</div>`}
      ${E.url?`<div class="mini"><a class="lk" href="${esc(E.url)}" target="_blank" rel="noopener">Abrir edital ↗</a></div>`:""}</div>
@@ -167,7 +167,7 @@ async function salvarAvaliacaoLink(){
   const antes=av.vid;saveAv();const v=vehicles.find(x=>x.id===av.vid);if(!v)return;
   const L=av.anexo||{},d=(av.site||{}).dados||{};
   const put=(k,val)=>{if(temV(val)&&!temV(v[k]))v[k]=val};
-  put("cor",L.cor||d.cor);put("chassi",L.chassi||d.chassi);put("renavam",L.renavam);put("motor",L.motor);put("uf",L.uf);put("combustivel",L.combustivel);put("classificacao",L.classificacao);
+  const ok=x=>x&&!/\*|SUPRIMID/.test(String(x))?x:"";put("cor",L.cor||d.cor);put("chassi",ok(L.chassi)||d.chassi);put("renavam",ok(L.renavam)||d.renavam);put("motor",d.motor);put("motor",L.motor);put("uf",L.uf);put("combustivel",L.combustivel);put("classificacao",L.classificacao);
   put("lanceMin",L.lanceMin||num(d.lanceMin)||"");put("km",d.km);put("placa",L.placa);
   if(L.patio)v.editalLote={patio:L.patio,lote:L.lote};if(L.desalienacao)v.desalienacao=true;
   if(!v.fotosRef&&(av._fotosLink||[]).length)v.fotosRef=av._fotosLink.slice(0,8);

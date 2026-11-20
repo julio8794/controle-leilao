@@ -120,17 +120,19 @@ function lerAnexoLotes(paginas: string[]) {
     if (LIXO.test(m)) continue;
     corpo += " " + m;
   }
-  const PLACA = "[A-Z]{3}-?\\d[A-Z0-9]\\d{2}|(?:S\\/\\s?)?\\d?\\s*EMPLAC\\S*|S\\/\\s?PLACA|SEM\\s+PLACA|N\\/I";
-  const partes = corpo.split(new RegExp(`(?=@@PATIO )|(?=(?:^|\\s)\\d{4}\\s+(?:${PLACA})\\s)`));
-  const re = new RegExp(`^\\s*(\\d{4})\\s+(${PLACA})\\s+((?:[A-HJ-NPR-Z0-9]\\s?){16}[A-HJ-NPR-Z0-9]|N\\/I)\\s+(.+?)\\s+(\\d{6,11}|N\\/I)\\s+([A-Z]{2}|N\\/I)\\s+(.+?)\\s+(\\d{4}\\/\\d{4}|N\\/I)\\s+(${COMB})\\s+(.+?)\\s+(SIM|NÃO|NAO)\\s+(.+?)\\s+R\\$\\s*([\\d.]+,\\d{2})`, "i");
+  const PLACA = "[A-Z]{3}-?\\d[A-Z0-9]\\d{2}|(?:S\\/\\s?)?\\d?\\s*EMPLAC\\S*|S\\/\\s?PLACA|SEM\\s+PLACA|SUPRIMID[OA]|N\\/I";
+  const LOTE = "\\d{4}(?:-\\s*[A-Z\\/]{1,4})?";
+  const partes = corpo.split(new RegExp(`(?=@@PATIO )|(?=(?:^|\\s)${LOTE}\\s+(?:${PLACA})\\s)`));
+  const re = new RegExp(`^\\s*(\\d{4})(?:-\\s*([A-Z\\/]{1,4}))?\\s+(${PLACA})\\s+((?:[A-HJ-NPR-Z0-9*]\\s?){16}[A-HJ-NPR-Z0-9*]|SUPRIMID[OA]|N\\/I)\\s+(.+?)\\s+(\\d{6,11}|SUPRIMID[OA]|N\\/I)\\s+([A-Z]{2}|N\\/I)\\s+(.+?)\\s+(\\d{4}\\/\\d{4}|N\\/I)\\s+(${COMB})\\s+(.+?)\\s+(SIM|NÃO|NAO)\\s+(.+?)\\s+R\\$\\s*([\\d.]+,\\d{2})`, "i");
   for (const p of partes) {
     const s = p.replace(/\s+/g, " ").trim(); if (!s) continue;
     let t = s;
     if (t.startsWith("@@PATIO ")) { const k = t.indexOf("@@", 8); patio = t.slice(8, k > 0 ? k : undefined).trim(); t = k > 0 ? t.slice(k + 2).trim() : ""; if (!t) continue }
-    if (!/^\d{4}\s/.test(t)) continue;
+    if (!/^\d{4}(-\s*[A-Z\/]{1,4})?\s/.test(t)) continue;
     const m = t.match(re); if (!m) { falhas.push({ patio, texto: t.slice(0, 260) }); continue }
-    const [, lote, placa, chassi, modelo, renavam, uf, cor, ano, comb, motor, desal, classif, valor] = m;
-    out.push({ patio, lote, placa: /EMPLAC|PLACA|N\/I/.test(placa) ? "" : placa.replace("-", ""), semPlaca: /EMPLAC|PLACA/.test(placa), chassi: chassi === "N/I" ? "" : chassi.replace(/\s+/g, ""), modelo: modelo.trim(), renavam: renavam === "N/I" ? "" : renavam, uf: uf === "N/I" ? "" : uf, cor: cor.trim(), ano: ano === "N/I" ? "" : ano, combustivel: comb.replace(/\s+/g, ""), motor: motor.replace(/\s+/g, ""), desalienacao: /SIM/i.test(desal), classificacao: classif.trim(), lanceMin: Number(valor.replace(/\./g, "").replace(",", ".")), linha: t.slice(0, 300) });
+    const [, lote, sufixo, placa, chassi, modelo, renavam, uf, cor, ano, comb, motor, desal, classif, valor] = m;
+    const sup = (x: string) => /SUPRIMID|\*/.test(x || "");
+    out.push({ patio, lote, sufixo: sufixo ? sufixo.replace(/\s+/g, "") : "", placa: /EMPLAC|PLACA|N\/I|SUPRIMID/.test(placa) ? "" : placa.replace("-", ""), semPlaca: /EMPLAC|PLACA/.test(placa), suprimido: sup(placa) || sup(chassi) || sup(renavam), chassi: chassi === "N/I" || /SUPRIMID/.test(chassi) ? "" : chassi.replace(/\s+/g, ""), modelo: modelo.trim(), renavam: renavam === "N/I" || sup(renavam) ? "" : renavam, uf: uf === "N/I" ? "" : uf, cor: cor.trim(), ano: ano === "N/I" ? "" : ano, combustivel: comb.replace(/\s+/g, ""), motor: motor.replace(/\s+/g, ""), desalienacao: /SIM/i.test(desal), classificacao: classif.trim(), lanceMin: Number(valor.replace(/\./g, "").replace(",", ".")), linha: t.slice(0, 300) });
   }
   return { lotes: out, falhas };
 }
