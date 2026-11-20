@@ -2,12 +2,17 @@
 const urlEdital=u=>String(u||"").split("?")[0].trim().toLowerCase();
 const slugLote=u=>{const m=String(u||"").match(/\/lotes?\/(\d{2,4}-\d{2,4})/i);return m?m[1]:""};
 const cidadeDoPatio=p=>String(p||"").replace(/\b(ADM|F\/R|FR|INSERV[IÍ]VEL|SUCATA|P[AÁ]TIO)\b/gi,"").replace(/\s+/g," ").trim().toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase()).replace(/\b(De|Da|Do|Das|Dos|E)\b/g,w=>w.toLowerCase());
+const chassisDe=ls=>new Set((ls||[]).map(l=>norm(l.chassi)).filter(c=>c.length>=10));
+function sobreposicao(a,b){const A=chassisDe(a),B=chassisDe(b);if(!A.size||!B.size)return 0;let n=0;A.forEach(c=>{if(B.has(c))n++});return n/Math.min(A.size,B.size)}
+/* mesmo edital = mesmo link, link alternativo já visto, ou mesmos chassis no Anexo I (o leiloeiro publica o mesmo edital em arquivos diferentes) */
+function gruposDoEdital(ed,lotes){return grupos.filter(g=>urlEdital(g.edital_url)===urlEdital(ed)||((g.custas||{}).editalAliases||[]).some(u=>urlEdital(u)===urlEdital(ed))||(lotes&&lotes.length&&sobreposicao(g.lotes,lotes)>=.8))}
+async function lembrarAlias(gs,ed){for(const g of gs){if(urlEdital(g.edital_url)===urlEdital(ed))continue;g.custas=g.custas||{};const al=g.custas.editalAliases||[];if(al.some(u=>urlEdital(u)===urlEdital(ed)))continue;al.push(ed);g.custas.editalAliases=al;try{await sb.from("grupos").update({custas:g.custas}).eq("id",g.id)}catch(e){}}}
 const mesmaCidade=(g,c)=>{const a=norm(g.cidade||g.nome||""),b=norm(c);return !!b&&(a===b||a.startsWith(b+" ")||a.startsWith(b))};
 
 /* casa o lote do site com o Anexo I, sem depender de grupo */
 function casarLoteSite(d,lotes,edUrl){
   const n=+String(d.lote||"").split(/[-\/ ]/).pop();const mt=tok(d.modelo),am=anoModelo(d.ano);const pref=String(d.lote||"").includes("-")?String(d.lote).split("-")[0]:"";
-  const outros=vehicles.filter(x=>x.editalLote&&String(x.lote||"").includes("-")&&grupos.some(g=>g.id===x.grupoId&&urlEdital(g.edital_url)===urlEdital(edUrl)));
+  const gsEd=gruposDoEdital(edUrl,lotes).map(g=>g.id);const outros=vehicles.filter(x=>x.editalLote&&String(x.lote||"").includes("-")&&gsEd.includes(x.grupoId));
   const doPref=new Set(outros.filter(x=>pref&&String(x.lote).startsWith(pref+"-")).map(x=>x.editalLote.patio));
   const deOutro=new Set(outros.filter(x=>pref&&!String(x.lote).startsWith(pref+"-")).map(x=>x.editalLote.patio));
   const cand=lotes.filter(l=>(n&&+l.lote===n)||(d.chassi&&norm(d.chassi)===norm(l.chassi))).map(l=>{let s=0;const lt=tok(l.modelo);
@@ -19,7 +24,7 @@ function casarLoteSite(d,lotes,edUrl){
 }
 /* cria/acha o grupo do edital + cidade */
 async function grupoParaLote(edUrl,cidade,base,st){
-  const mesmos=grupos.filter(g=>urlEdital(g.edital_url)===urlEdital(edUrl));
+  const mesmos=gruposDoEdital(edUrl,base.lotes);await lembrarAlias(mesmos,edUrl);
   const ja=mesmos.find(g=>mesmaCidade(g,cidade))||(!cidade&&mesmos[0]);if(ja)return {g:ja,acao:"vinculado"};
   if(!podeGerir())return {g:null,acao:"sem permissão para criar grupo"};
   let custas,extra={};
@@ -50,7 +55,7 @@ async function importarPorLink(){
     // edital
     const ed=(r.editais||[])[0];av.edital={url:ed||null};
     if(ed){say("📄 Lendo o Anexo I do edital…");
-      const conhecido=grupos.find(g=>urlEdital(g.edital_url)===urlEdital(ed));
+      const conhecido=gruposDoEdital(ed,null)[0];
       let lotes=conhecido?await lotesDoGrupo(conhecido):null;if(!lotes||!lotes.length){const x=await chamarIA("lotes_edital",{url:ed});lotes=x.lotes||[]}
       const m=casarLoteSite(d,lotes,ed);
       if(m.duvida){av.edital.duvida=m.cands;av.edital.lotes=lotes;say("⚠ O lote aparece em mais de um pátio: escolha abaixo.")}
