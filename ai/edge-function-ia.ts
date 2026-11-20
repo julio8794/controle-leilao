@@ -169,19 +169,52 @@ TAREFA: ler o EDITAL de leilão e extrair as custas e prazos que o arrematante p
   out.taxasFixas = (dados.taxasFixas || []).map((t: any) => ({ ...t, ...(escaneado ? { verificado: false } : verificar({ valor: t.valor, trecho: t.trecho }, fonteN)), valor: t.valor }));
   return { resultado: out, uso };
 }
+// ---------- lote estruturado (JSON embutido na página; sem IA) ----------
+function fimObjeto(s: string, i: number) { let d = 0, str = false; for (let k = i; k < s.length; k++) { const c = s[k]; if (str) { if (c === "\\") { k++; continue } if (c === '"') str = false; continue } if (c === '"') str = true; else if (c === "{") d++; else if (c === "}") { d--; if (!d) return k + 1 } } return -1 }
+function loteEstruturado(html: string, url: string) {
+  const h = html.replace(/\\\\u([0-9a-f]{4})/gi, "\\u$1").replace(/\\\\"/g, '"').replace(/\\"/g, '"');
+  const slug = decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() || "");
+  let L: any = null; let pos = 0;
+  while ((pos = h.indexOf('{"lot":{"id"', pos)) >= 0) { const e = fimObjeto(h, pos); if (e < 0) break; try { const o = JSON.parse(h.slice(pos, e)).lot; if (o && (o.slug === slug || !L)) { L = o; if (o.slug === slug) break } } catch (_) { } pos = e }
+  if (!L || (L.slug && slug && L.slug !== slug)) return null;
+  const v = (x: any) => x === null || x === undefined || x === "" ? null : x;
+  const c = (valor: any) => ({ valor: v(valor), trecho: v(valor) == null ? null : String(valor), pagina: null, verificado: v(valor) != null, fonte: "registro do lote na página" });
+  const titulo = String(L.title || ""); const mt = titulo.match(/^(.*?)\s*([A-Z0-9]+\/\S.*?)\s+-\s+(\d{4}\/\d{4})\s*$/);
+  const n = (x: any) => { const k = Number(String(x ?? "").replace(/[^\d.,]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".")); return isFinite(k) && k > 0 ? k : null };
+  const lances = (L.bids || []).map((b: any) => n(b.value ?? b.amount ?? b.bid)).filter(Boolean) as number[];
+  const A = L.auction || {}; const datas = Object.entries(A).filter(([k, x]) => /date|closing|opening|start|end/i.test(k) && typeof x === "string" && /^\d{4}-\d{2}-\d{2}/.test(x as string)).map(([, x]) => String(x).slice(0, 10)).sort();
+  const limpa = (t: any) => v(String(t || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim());
+  const fotos = (L.images || []).map((i: any) => i?.image?.origin || (i?.image?.filename ? new URL("/lotes/fotos/" + i.image.filename, "https://nordesteleiloes-files.s3.amazonaws.com").href : null)).filter(Boolean);
+  const pdfs = [...JSON.stringify(A).matchAll(/https?:\/\/[^"\s]+?\.pdf/gi)].map(m => m[0]);
+  return {
+    fotos, editaisLote: pdfs,
+    campos: {
+      modelo: c(mt ? mt[2] : (L.carBrand?.name ? null : null)), marca: c(L.carBrand?.name), ano: c(L.year || (mt && mt[3])), cor: c(L.color), placa_final: c(L.plate), chassi: c(L.chassi),
+      renavam: c(L.renavam), motor: c(L.engine), combustivel: c(L.gas), km: c(null), lote: c(L.numberCode != null ? String(L.numberCode).padStart(3, "0") : null),
+      lance_minimo: c(n(L.minimunSale) ?? n(L.avaliation) ?? n(L.initialBid)), lance_atual: c(lances.length ? Math.max(...lances) : null),
+      data_leilao: c(datas[datas.length - 1] || null), leiloeiro: c(A.auctioneer?.name), comitente: c(A.comitent?.name || A.committent?.name || A.seller?.name), cidade: c(L.city), uf: c(L.state),
+      situacao: c(mt ? mt[1] : null), observacoes: c(limpa(L.observation) || limpa(L.description)),
+    }
+  };
+}
 async function importarLote(url: string) {
   const { bytes, url: final } = await baixar(url, 6e6);
   const html = new TextDecoder().decode(bytes);
+  const meuSlug = decodeURIComponent(new URL(final).pathname.split("/").filter(Boolean).pop() || "");
+  let corte = html.length; for (const m of html.matchAll(/href=["']([^"']*\/lotes?\/[^"'#?]+)["']/gi)) { const sl = decodeURIComponent(m[1].split("/").filter(Boolean).pop() || ""); if (sl && sl !== meuSlug) { corte = m.index!; break } }
   const fotos = new Set<string>(); const abs = (u: string) => { try { return new URL(u.replace(/&amp;/g, "&"), final).href } catch { return null } };
   for (const m of html.matchAll(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/gi)) { const a = abs(m[1]); if (a) fotos.add(a) }
-  for (const m of html.matchAll(/(?:src|data-src|href)=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)) { const a = abs(m[1]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder/i.test(a)) fotos.add(a) }
+  for (const m of html.matchAll(/(?:src|data-src|href)=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)) { if (m.index! > corte) continue; const a = abs(m[1]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder/i.test(a)) fotos.add(a) }
   // fotos carregadas por JSON/JS (URLs soltas, inclusive com barras escapadas)
-  for (const m of html.replace(/\\\//g, "/").matchAll(/https?:\/\/[^"'\s<>()]+?\.(?:jpe?g|png|webp)(?:\?[^"'\s<>()]*)?/gi)) { const a = abs(m[0]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder|thumb_?s?mall|comitente/i.test(a)) fotos.add(a) }
+  const h2 = html.replace(/\\\//g, "/"); let corte2 = h2.length; for (const m of h2.matchAll(/href=["']([^"']*\/lotes?\/[^"'#?]+)["']/gi)) { const sl = decodeURIComponent(m[1].split("/").filter(Boolean).pop() || ""); if (sl && sl !== meuSlug) { corte2 = m.index!; break } }
+  for (const m of h2.matchAll(/https?:\/\/[^"'\s<>()]+?\.(?:jpe?g|png|webp)(?:\?[^"'\s<>()]*)?/gi)) { if (m.index! > corte2) continue; const a = abs(m[0]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder|thumb_?s?mall|comitente/i.test(a)) fotos.add(a) }
   // PDFs da página (edital primeiro) — extração por código, sem IA
   const pdfs: { url: string; txt: string }[] = [];
   for (const m of html.matchAll(/<a[^>]+href=["']([^"']+?\.pdf(?:\?[^"']*)?)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi)) { const a = abs(m[1]); if (a) pdfs.push({ url: a, txt: m[2].replace(/<[^>]+>/g, " ").trim() }) }
   for (const m of html.replace(/\\\//g, "/").matchAll(/https?:\/\/[^"'\s<>()]+?\.pdf(?:\?[^"'\s<>()]*)?/gi)) { const a = abs(m[0]); if (a && !pdfs.some(p => p.url === a)) pdfs.push({ url: a, txt: "" }) }
-  const editais = [...new Set(pdfs.sort((x, y) => (/edital/i.test(y.url + y.txt) ? 1 : 0) - (/edital/i.test(x.url + x.txt) ? 1 : 0)).map(p => p.url))].slice(0, 5);
+  const est = loteEstruturado(html, final);
+  const editais = [...new Set([...(est?.editaisLote || []), ...pdfs.sort((x, y) => (/edital/i.test(y.url + y.txt) ? 1 : 0) - (/edital/i.test(x.url + x.txt) ? 1 : 0)).map(p => p.url)])].slice(0, 5);
+  if (est && est.campos.modelo.valor) return { resultado: { ...est.campos, fotos: est.fotos, editais, url: final, estruturado: true }, uso: { entrada: 0, cache: 0, saida: 0, modelo: "sem IA (registro do lote)", agente: "codigo" } };
   const texto = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|li|tr|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, 60000);
   const props: Record<string, any> = {}; ["modelo", "marca", "ano", "cor", "placa_final", "chassi", "lote", "data_leilao", "leiloeiro", "comitente", "situacao", "observacoes"].forEach(k => props[k] = campo("string")); ["km", "lance_minimo", "lance_atual"].forEach(k => props[k] = campo("number"));
   const instr = `${REGRAS_GERAIS}
@@ -244,7 +277,7 @@ Deno.serve(async (req) => {
   const { count } = await sb.from("ia_uso").select("id", { count: "exact", head: true }).eq("painel_id", painel_id).gte("criado_em", hoje.toISOString());
   if ((count || 0) >= LIMITE) return erro(`Limite diário de ${LIMITE} usos da IA atingido`, 429);
   const t0 = Date.now(); AGENTE_ATUAL = acao;
-  const chave = ["ler_edital", "importar_lote"].includes(acao) && body.url ? acao + ":v2:" + body.url : null;
+  const chave = ["ler_edital", "importar_lote"].includes(acao) && body.url ? acao + ":v3:" + body.url : null;
   if (chave && !body.refazer) { const { data: c } = await sb.from("ia_cache").select("resultado").eq("painel_id", painel_id).eq("chave", chave).gte("criado_em", new Date(Date.now() - 30 * 864e5).toISOString()).maybeSingle(); if (c) return json({ ...c.resultado, _cache: true }) }
   try {
     let r: any;

@@ -300,3 +300,11 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 .vinc .gal{margin-bottom:6px}.vinc-g{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .kv{display:flex;gap:8px;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed var(--line)}.kv span{color:var(--mut)}.kv b{text-align:right;font-weight:600;word-break:break-all}
 @media(max-width:560px){.vinc-g{grid-template-columns:1fr}}
+
+.links{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.lrow{display:grid;grid-template-columns:26px 1fr 34px;gap:6px;align-items:center}.lrow:has(> :nth-child(2):last-child){grid-template-columns:26px 1fr}
+.lnum{width:26px;height:26px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;font-size:12px;color:var(--mut)}
+.lx{background:var(--panel2);border:1px solid var(--line);border-radius:8px;height:38px}
+.fila{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
+.fchip{flex:none;display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--txt)}
+.fchip b{font-size:11px;color:var(--mut)}.fchip.on{border-color:var(--acc);background:rgba(245,165,36,.12)}.fchip.f-erro{border-color:var(--bad)}

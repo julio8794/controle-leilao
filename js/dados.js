@@ -86,8 +86,11 @@ async function completarDados(v,op={}){
       else log.push("Edital: lote não encontrado no Anexo I")}catch(e){log.push("Edital: "+e.message)}}
   // 2) site do lote (cache de 30 dias no servidor)
   if(/^https?:\/\//.test(v.link||"")){try{const r=await chamarIA("importar_lote",{url:v.link});const s={};
-      [["modelo","modelo"],["ano","ano"],["cor","cor"],["placa_final","placa"],["chassi","chassi"],["km","km"],["lance_minimo","lanceMin"],["lance_atual","lanceAtual"],["situacao","classificacao"],["observacoes","obsSite"],["data_leilao","dataLeilao"]].forEach(([a,b])=>{if(r[a]&&r[a].valor!=null&&r[a].verificado)s[b]=r[a].valor});
-      fontes.site=s;if(r.fotos&&r.fotos.length&&!v.fotosRef)v.fotosRef=r.fotos.filter(u=>!/comitente/i.test(u)).slice(0,8)}catch(e){log.push("Site: "+e.message)}}
+      [["modelo","modelo"],["ano","ano"],["cor","cor"],["placa_final","placa"],["chassi","chassi"],["renavam","renavam"],["motor","motor"],["combustivel","combustivel"],["km","km"],["lance_minimo","lanceMin"],["lance_atual","lanceAtual"],["situacao","classificacao"],["observacoes","obsSite"],["data_leilao","dataLeilao"]].forEach(([a,b])=>{if(r[a]&&r[a].valor!=null&&r[a].verificado)s[b]=r[a].valor});
+      fontes.site=s;
+      // fotos: o registro do lote é a fonte certa; substitui fotos antigas vindas do site (que podiam misturar outros lotes)
+      const daWeb=(v.fotosRef||[]).every(u=>/^https?:/.test(u));
+      if(r.fotos&&r.fotos.length&&(!v.fotosRef||(r.estruturado&&daWeb))){const novas=r.fotos.filter(u=>!/comitente/i.test(u)).slice(0,8);if(JSON.stringify(novas)!==JSON.stringify(v.fotosRef)){if(v.fotosRef)log.push(`Fotos atualizadas: ${novas.length} do próprio lote`);v.fotosRef=novas}}}catch(e){log.push("Site: "+e.message)}}
   // 3) mescla com regras
   const E=fontes.edital||{},S=fontes.site||{};const itens=[];
   CAMPOS_CONF.forEach(([k,l])=>{const atual=v[k],ed=E[k],si=S[k];const it={campo:k,nome:l,sistema:atual??"",edital:ed??"",site:si??""};
