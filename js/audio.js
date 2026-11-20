@@ -48,7 +48,8 @@ async function processarAudios(fs){
         x.origens.push(a.nome);x.resumos.push(m.resumo);m.checks.forEach(c=>{const i=x.checks.findIndex(y=>y.item===c.item);if(i>=0)x.checks[i]=c;else x.checks.push(c)});
         x.pecas.push(...m.pecas.filter(p=>!x.pecas.some(q=>norm(q.desc)===norm(p.desc))));x.observacoes.push(...m.observacoes);["km","nota","limite"].forEach(f=>{if(m[f]&&m[f].valor!=null)x[f]=m[f]})});
       (r.nao_identificado||[]).forEach(t=>a.erro=(a.erro?a.erro+" · ":"")+t)}catch(e){a.st="erro";a.erro=e.message}}
-  aud.res=Object.values(porMoto).map(m=>{m.on=!!m.moto_id;m.checks.forEach(c=>c.on=true);m.pecas.forEach(p=>p.on=true);m.observacoes.forEach(o=>o.on=true);return m});
+  const PESO={ok:0,at:1,pb:2};
+  aud.res=Object.values(porMoto).map(m=>{const pior={};m.checks.forEach(c=>{const x=pior[c.item];if(!x||PESO[c.status]>PESO[x.status])pior[c.item]=c});m.checks=Object.values(pior);m.on=!!m.moto_id;m.checks.forEach(c=>c.on=true);m.pecas.forEach(p=>p.on=true);m.observacoes.forEach(o=>o.on=true);return m});
   aud.ocupado=false;renderAudio();const s2=$("#auSt");if(s2)s2.textContent=`✅ ${aud.itens.filter(x=>x.st==="ok").length} áudio(s) transcrito(s) · ${aud.res.filter(m=>m.moto_id).length} moto(s) identificada(s). Revise e aplique.`;
 }
 function revisaoAudHTML(){
