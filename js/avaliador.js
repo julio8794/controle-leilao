@@ -158,7 +158,9 @@ function avCalc(){
   const fipe=num(av.fipe)||fipeIA;
   const V=num(av.vendaAlvo)||revMed||fipe*.85;
   const vSrc=num(av.vendaAlvo)?"informada por você":revMed?"sugerida pela IA":fipe?"85% da FIPE":"";
-  const lm=rep=>Math.max(0,(V/(1+m)-tx-rep*(1+cont))/(1+com));
+  // mesma regra das motos: teto = FIPE × % do Config; sai custas, documentação (serviços fixos) e reparos; divide pela comissão → só o lance
+  const pctT=num(PCFG.pctFipe)||70,servFix=["transferencia","vistoria"].reduce((a,k)=>a+num((PCFG.servicos||{})[k]),0);
+  const lm=rep=>fipe?Math.max(0,(fipe*pctT/100-tx-servFix-rep*(1+cont))/(1+com)):Math.max(0,(V/(1+m)-tx-rep*(1+cont))/(1+com));
   const otim=lm(sMin),real=lm(sVal),pess=lm(sMax);
   const L=num(av.lanceAtual);
   const custoL=L*(1+com)+tx+sVal*(1+cont);
