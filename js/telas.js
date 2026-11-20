@@ -75,9 +75,9 @@ const brlC=x=>(x<0?"−":"")+"R$ "+Math.round(Math.abs(x)).toLocaleString("pt-BR
 function heroLances(v,c){
   const la=laInfo(v);const lm=lanceMaxDe(v,c);const L=lm?calc({...v,lance:String(lm.valor)}):null;const LA=la?calc({...v,lance:String(la.valor)}):null;
   const ok=L&&isFinite(L.lucro);const acima=la&&lm&&la.valor+(la.inc||0)>lm.valor;
-  return `<div class="hero-l fin" data-noopen="1">
+  return `<div class="hero-l fin">
     <div class="hl"><span>${la?"Lance atual":"Lance mínimo"}</span><b>${la?brlC(la.valor):v.lanceMin?brlC(num(v.lanceMin)):"—"}</b><small>${la?haQuanto(la.em):"sem leitura"}</small></div>
-    <button class="hl hl-max ${acima?"estourou":""}" data-lmx="${v.id}"><span>Lance máx. ✎</span><b>${lm?brlC(lm.valor):"—"}</b><small>${!lm?"sem FIPE/venda":lm.tipo==="limite"?"seu limite":lm.tipo==="fipe"?`${c.pctF}% da FIPE`:"pela margem"}${acima?" · ⚠ passou":""}</small></button>
+    <button class="hl hl-max ${acima?"estourou":""}" data-noopen="1" data-lmx="${v.id}"><span>Lance máx. ✎</span><b>${lm?brlC(lm.valor):"—"}</b><small>${!lm?"sem FIPE/venda":lm.tipo==="limite"?"seu limite":lm.tipo==="fipe"?`${c.pctF}% da FIPE`:"pela margem"}${acima?" · ⚠ passou":""}</small></button>
     <div class="hl ${ok?(L.lucro>=0?"pos":"neg"):""}"><span>Lucro líquido</span><b>${ok?(L.lucro>=0?"+":"")+brlC(L.lucro):"—"}</b><small>${LA&&isFinite(LA.lucro)?`no atual ${brlC(LA.lucro)}`:"no lance máx."}</small></div>
   </div>`}
 function lmxEditor(v){const c=calc(v);const lim=num((v.vistoria||{}).limite);
