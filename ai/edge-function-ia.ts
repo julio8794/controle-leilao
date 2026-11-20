@@ -11,9 +11,12 @@ const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: 
 const erro = (m: string, s = 400) => json({ erro: m }, s);
 
 // chave da plataforma de consultas: segredo BIGTECH_API_KEY (ou "Chave", nome usado no cadastro)
-const chaveBigTech = () => (Deno.env.get("BIGTECH_API_KEY") || Deno.env.get("Chave") || "").trim();
+const ehNomeBigTech = (k: string) => /bigtech|^\s*chave\s*$/i.test(k);
+const chaveBigTech = () => (Deno.env.get("BIGTECH_API_KEY") || Object.entries(Deno.env.toObject()).find(([k, v]) => ehNomeBigTech(k) && String(v).trim())?.[1] || "").trim();
+// diagnóstico: só NOMES e tamanhos dos segredos personalizados (nunca valores)
+const nomesSegredos = () => Object.entries(Deno.env.toObject()).filter(([k]) => !/^(SUPABASE_|DENO_|SB_|PATH$|HOME$|HOSTNAME$|PWD$|LANG$|TZ$)/.test(k)).map(([k, v]) => JSON.stringify(k) + "(" + String(v).trim().length + ")").join(", ");
 // chave da OpenAI: OPENAI_API_KEY ou, na falta, o segredo que começa com sk- (nunca a da plataforma de consultas)
-const chaveOpenAI = () => Deno.env.get("OPENAI_API_KEY") || Object.entries(Deno.env.toObject()).find(([k, v]) => !["BIGTECH_API_KEY", "Chave"].includes(k) && /^sk-[A-Za-z0-9_-]{20,}/.test(String(v).trim()))?.[1]?.trim();
+const chaveOpenAI = () => Deno.env.get("OPENAI_API_KEY") || Object.entries(Deno.env.toObject()).find(([k, v]) => !ehNomeBigTech(k) && /^sk-[A-Za-z0-9_-]{20,}/.test(String(v).trim()))?.[1]?.trim();
 // ---------- preços (US$ por 1 milhão de tokens: entrada, entrada em cache, saída) ----------
 // Fonte: developers.openai.com/api/docs/pricing (nov/2026). Atualize aqui se a OpenAI mudar.
 const PRECOS: [RegExp, number, number, number][] = [
@@ -215,7 +218,7 @@ const CONSULTAS: Record<string, { nome: string; entrada: "placa" | "chassi"; pre
   "leilao-base01-score": { nome: "Score de passagem por leilão", entrada: "placa", preco: 4.96 },
 };
 async function consultaVeicular(sbUser: any, email: string, body: any) {
-  const key = chaveBigTech(); if (!key) throw new Error("Chave da plataforma de consultas não configurada no Supabase (BIGTECH_API_KEY)");
+  const key = chaveBigTech(); if (!key) throw new Error("Chave da plataforma de consultas não configurada no Supabase (BIGTECH_API_KEY). Segredos vistos: " + nomesSegredos());
   if (!email || !body.senha) throw new Error("Confirme a sua senha");
   const anon = createClient(Deno.env.get("SUPABASE_URL")!, (Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY"))!, { auth: { persistSession: false } });
   const { error: eLogin } = await anon.auth.signInWithPassword({ email, password: String(body.senha) });
