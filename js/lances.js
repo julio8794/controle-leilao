@@ -15,8 +15,8 @@ async function atualizarLances(ms,aviso){
   await Promise.all([trab(),trab(),trab()]);
   return {n:alvo.length,mud,err,sem:ms.length-alvo.length};
 }
-document.addEventListener("click",async e=>{const b=e.target.closest("[data-glances],#cmpLances");if(!b)return;
-  const gid=b.dataset.glances||fgrupoId;const ms=vehicles.filter(v=>(!gid||v.grupoId===gid)&&(v.status||"avaliacao")==="avaliacao");
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-glances],#cmpLances,#listaLances");if(!b)return;
+  const gid=b.dataset.glances||fgrupoId;const ms=(b.id==="listaLances"&&typeof filtrados==="function"?filtrados():vehicles.filter(v=>!gid||v.grupoId===gid)).filter(v=>(v.status||"avaliacao")==="avaliacao");
   b.disabled=true;const txt=b.textContent;const r=await atualizarLances(ms,t=>b.textContent=t);
   toast(`Lances atualizados: ${r.n} moto(s)${r.mud?` · ${r.mud} mudaram`:""}${r.err?` · ${r.err} com erro`:""}${r.sem?` · ${r.sem} sem link`:""}`);b.textContent=txt;b.disabled=false;render()});
 document.addEventListener("click",async e=>{const b=e.target.closest("#laUm");if(!b||!editing)return;b.disabled=true;b.textContent="🔄 Lendo o site…";await atualizarLances([editing]);keepScroll(renderETab)});

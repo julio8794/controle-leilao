@@ -328,3 +328,4 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 .lucro-row small{display:block;font-size:11px;color:var(--mut)}
 .lucro-row .upd{text-align:right}.lucro-row .upd b{font-size:13px;color:inherit}
 .lucro-row .upd b{color:inherit!important;opacity:.9}.lucro-row .upd{color:var(--mut)}
+.lances-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}.lances-bar span{font-size:12px;color:var(--mut)}

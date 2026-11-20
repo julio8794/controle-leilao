@@ -57,17 +57,21 @@ function barraFiltro(){return `${pacoteBanner()}<div class="toolbar"><input id="
   ${podeGerir()?`<div class="toolbar" style="margin:0;width:100%"><button class="btn ghost sm" id="impLink">🔗 Lote por link</button><button class="btn ghost sm" id="impPl">⬆ Planilha</button><button class="btn ghost sm" id="impAudio">🎤 Áudio de vistoria</button><button class="btn ghost sm fin" id="expPl">⬇ Exportar</button></div>`:""}<div class="seg2"><button data-vm="lista" class="${vmodo==="lista"?"on":""}">📋 Lista</button><button data-vm="comparar" class="${vmodo==="comparar"?"on":""} fin">🏁 Comparar</button></div></div>`}
 // Lucro em R$ e última atualização em todo card da lista.
 // Em avaliação estima o lucro se arrematar pelo lance atual do leilão (ou o lance mínimo).
+// Lucro em R$ calculado no LANCE MÁXIMO (seu limite ou o lance máx. calculado); vendida = lucro real.
 function lucroLinha(v,c,s){
-  const la=laInfo(v);let k=c,base=c.vendido?"venda realizada":"pela venda alvo "+(c.venda?brl(c.venda):"");
-  if(s==="avaliacao"){const lance=la?la.valor:num(v.lance)||num(v.lanceMin);if(lance){k=calc({...v,lance:String(lance)});base=(la?"se arrematar no lance atual":"no lance mínimo")+(k.venda?" · venda "+brl(k.venda):"")}else k=null}
+  const la=laInfo(v);let k=c,base="venda realizada";
+  if(!c.vendido){const li=limiteDe(v);if(li&&li.valor){k=calc({...v,lance:String(li.valor)});base=`no lance máx. ${brl(li.valor)} (${li.tipo==="seu limite"?"seu limite":"calculado"})`+(la?` · atual ${brl(la.valor)}${la.valor>li.valor?" ⚠ acima":""}`:"")}else k=null}
   const ok=k&&isFinite(k.lucro);
-  const ts=[la&&la.em,v.atualizadoEm&&new Date(v.atualizadoEm).toISOString(),v.criado&&new Date(v.criado).toISOString()].filter(Boolean).sort().pop();
-  return `<div class="lucro-row fin ${ok?(k.lucro>=0?"pos":"neg"):""}"><div><span>${c.vendido?"Lucro real":"Lucro estimado"}</span><b>${ok?(k.lucro>=0?"+":"")+brl(k.lucro):"—"}</b><small>${ok?base+(isFinite(k.roi)?" · ROI "+pct(k.roi):""):"falta venda alvo ou lance"}</small></div><div class="upd"><span>Atualizado</span><b>${ts?haQuanto(ts):"—"}</b>${la&&la.em&&la.em!==ts?`<small>lance ${haQuanto(la.em)}</small>`:""}</div></div>`;
+  const ts=la&&la.em||[v.atualizadoEm&&new Date(v.atualizadoEm).toISOString(),v.criado&&new Date(v.criado).toISOString()].filter(Boolean).sort().pop();
+  return `<div class="lucro-row fin ${ok?(k.lucro>=0?"pos":"neg"):""}"><div><span>${c.vendido?"Lucro real":"Lucro no lance máx."}</span><b>${ok?(k.lucro>=0?"+":"")+brl(k.lucro):"—"}</b><small>${ok?base+(isFinite(k.roi)?" · ROI "+pct(k.roi):""):"falta venda alvo para calcular o lance máx."}</small></div><div class="upd"><span>${la?"Lance lido":"Atualizado"}</span><b>${ts?haQuanto(ts):"—"}</b></div></div>`;
 }
+function barraLances(){const ms=filtrados().filter(v=>(v.status||"avaliacao")==="avaliacao");if(!ms.length)return "";
+  const ult=ms.map(v=>laInfo(v)&&laInfo(v).em).filter(Boolean).sort();const velho=ult.length?ult[0]:null;
+  return `<div class="lances-bar fin"><button class="btn sm" id="listaLances">🔄 Puxar lances atuais${fgrupoId?" do edital":""}</button><span>${ms.length} moto(s) em avaliação · ${ult.length?`mais antigo lido ${haQuanto(velho)}`:"nenhum lance lido ainda"}</span></div>`}
 function lista(){
   if(!vivos().length)return barraFiltro()+emptyHTML();
   const arr=filtrados();
-  return barraFiltro()+`<div class="grid list">${arr.map(v=>{const c=calc(v);const s=v.status||"arrematado";const vp=vistProg(v);const vs=v.vistoria||{};const g=grupoDe(v);const nt=notaFinal(v);
+  return barraFiltro()+barraLances()+`<div class="grid list">${arr.map(v=>{const c=calc(v);const s=v.status||"arrematado";const vp=vistProg(v);const vs=v.vistoria||{};const g=grupoDe(v);const nt=notaFinal(v);
     return `<div class="card vcard ${v.fotosRef?"has-cover":""}" data-open="${v.id}">
       ${v.fotosRef?`<div class="cover"><img src="${esc(v.fotosRef[0])}" alt="" loading="lazy"><div class="cover-tags">${g?`<span>📁 ${esc(g.nome)}</span>`:""}${v.lote?`<span>Lote ${esc(v.lote)}</span>`:""}</div><div class="cover-strip">${v.fotosRef.slice(1).map(u=>`<img src="${esc(u)}" alt="" loading="lazy">`).join("")}</div></div>`:""}
       <div class="vtop"><div><h3>${esc(v.modelo||"Sem nome")} ${v.ano?`<span style="color:var(--mut);font-weight:500">${esc(v.ano)}</span>`:""}</h3><div class="sub">${[!v.fotosRef&&g?g.nome:"",!v.fotosRef&&v.lote?"Lote "+v.lote:"",v.cor,vs.resp?"👤 "+vs.resp:""].filter(Boolean).map(esc).join(" · ")||"—"}</div></div><span class="chip st-${s}">${STATUS[s]}</span></div>
