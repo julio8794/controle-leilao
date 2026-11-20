@@ -11,7 +11,7 @@ function editaisHTML(){
   const lista=grupos.filter(g=>!g._pendente).sort((a,b)=>(b.data_leilao||"").localeCompare(a.data_leilao||""));
   return `<div class="sec-t" style="margin-top:4px">📁 Grupos / editais <span style="font-weight:500;text-transform:none">· cada leilão com suas custas</span></div>
   ${podeGerir()?`<div class="toolbar" style="margin:0 0 12px"><label class="btn">📎 Novo grupo a partir do PDF<input type="file" accept="application/pdf,.pdf" hidden id="gNovoPdf"></label><button class="btn ghost" id="gNovo">＋ Novo grupo manual</button></div>`:""}
-  <div class="grid list">${lista.map(g=>{const ms=vehicles.filter(v=>v.grupoId===g.id);const vist=ms.filter(v=>vistProg(v).done>=CHECKS.length||v.statusVist==="vistoriada").length;const d=diasAte(g.data_leilao);
+  <div class="grid list">${lista.map(g=>{const ms=vehicles.filter(v=>v.grupoId===g.id&&v.status!=="descartada");const vist=ms.filter(v=>vistProg(v).done>=CHECKS.length||v.statusVist==="vistoriada").length;const d=diasAte(g.data_leilao);
    const lim=ms.reduce((a,v)=>a+(num(v.vistoria&&v.vistoria.limite)||0),0);
    return `<div class="card gcard"><div class="vtop"><div><h3>${esc(g.nome)}</h3><div class="sub">${[g.cidade,g.leiloeiro,g.comitente].filter(Boolean).map(esc).join(" · ")||"—"}</div></div>
      ${g.data_leilao?`<span class="chip ${d!=null&&d<0?"st-vendido":"st-avenda"}">${fmtD(g.data_leilao)}${d!=null&&d>=0?` · ${d===0?"hoje":d+"d"}`:""}</span>`:""}</div>

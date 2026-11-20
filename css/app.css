@@ -33,7 +33,7 @@ main{max-width:1100px;margin:auto;padding:16px 16px 100px}
 .legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}
 .legend div{display:flex;align-items:center;gap:8px;font-size:13px}
 .dot{width:10px;height:10px;border-radius:3px;flex:none}
-.legend .v{margin-left:auto;font-family:"Space Grotesk";font-size:13px}
+.legend .v{margin-left:auto;font-family:"Space Grotesk",system-ui,sans-serif;font-size:13px}
 .legend .p{color:var(--mut);font-size:12px;width:38px;text-align:right}
 .vbar{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center;margin:9px 0;font-size:13px}
 .vbar .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -55,7 +55,7 @@ main{max-width:1100px;margin:auto;padding:16px 16px 100px}
 .st-vendido{background:#3fb95022;color:#5fd36f}
 .vnums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
 .vnums div span{display:block;font-size:11px;color:var(--mut)}
-.vnums div b{font-family:"Space Grotesk";font-size:15px}
+.vnums div b{font-family:"Space Grotesk",system-ui,sans-serif;font-size:15px}
 .pos{color:var(--good)}.neg{color:var(--bad)}
 .empty{text-align:center;padding:40px 16px;color:var(--mut)}
 .empty .big{font-size:44px}
@@ -74,7 +74,7 @@ main{max-width:1100px;margin:auto;padding:16px 16px 100px}
 .summ{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}
 .summ div{background:var(--panel2);border-radius:10px;padding:7px 8px}
 .summ span{display:block;font-size:10px;color:var(--mut);text-transform:uppercase}
-.summ b{font-family:"Space Grotesk";font-size:14px}
+.summ b{font-family:"Space Grotesk",system-ui,sans-serif;font-size:14px}
 .sbody{padding:4px 16px 30px}
 fieldset{border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:16px 0 0;background:var(--panel)}
 legend{font-weight:700;padding:0 6px;display:flex;align-items:center;gap:6px}
@@ -85,7 +85,7 @@ label{display:block;font-size:12px;color:var(--mut)}
 label input,label select,label textarea{display:block;width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);color:var(--txt);border-radius:9px;padding:9px 10px;font:inherit}
 label input:focus,label select:focus,label textarea:focus,.drow input:focus{outline:2px solid var(--acc);outline-offset:-1px}
 .calc{display:flex;justify-content:space-between;align-items:center;background:var(--panel2);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:13px}
-.calc b{font-family:"Space Grotesk";font-size:16px}
+.calc b{font-family:"Space Grotesk",system-ui,sans-serif;font-size:16px}
 .calc.big{border:1px solid var(--acc)}
 .calc.big b{font-size:20px;color:var(--acc)}
 .drow{display:grid;grid-template-columns:1fr 110px 34px;gap:6px;margin-top:6px}
@@ -120,7 +120,7 @@ textarea.bk{width:100%;min-height:120px;background:var(--bg);color:var(--txt);bo
 .scn{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
 .scn div{background:var(--panel2);border-radius:10px;padding:10px;text-align:center}
 .scn span{display:block;font-size:11px;color:var(--mut)}
-.scn b{font-family:"Space Grotesk";font-size:17px}
+.scn b{font-family:"Space Grotesk",system-ui,sans-serif;font-size:17px}
 .scn .main{outline:2px solid var(--acc)}
 .gauge{position:relative;height:18px;border-radius:9px;overflow:hidden;display:flex;margin-top:16px}
 .gwrap{position:relative;margin-bottom:22px}
@@ -188,7 +188,7 @@ fieldset.vist{border-color:#f5a52466;background:linear-gradient(180deg,#1f1a0e,v
 .auth.on{display:flex}
 .auth-box{width:100%;max-width:380px;background:#161b22e6;border:1px solid var(--line);border-radius:24px;padding:28px 22px;box-shadow:0 30px 80px -30px #000;backdrop-filter:blur(10px)}
 .a-logo{width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#ffc35c,#f5a524 55%,#d9870a);display:grid;place-items:center;font-size:28px;box-shadow:0 10px 30px -10px #f5a524}
-.auth h2{margin:16px 0 4px;font-family:"Space Grotesk";font-size:24px}
+.auth h2{margin:16px 0 4px;font-family:"Space Grotesk",system-ui,sans-serif;font-size:24px}
 .a-sub{margin:0 0 18px;color:var(--mut);font-size:14px}
 .a-tabs{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:3px;margin-bottom:12px}
 .a-tabs button{border:0;background:none;padding:9px;border-radius:9px;color:var(--mut);font-weight:600}
@@ -212,7 +212,7 @@ fieldset.vist{border-color:#f5a52466;background:linear-gradient(180deg,#1f1a0e,v
 .lg-d{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--acc);font-weight:700;margin:14px 0 4px}
 .lg{padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
 .lg-h{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
-.lg-t{font-family:"Space Grotesk";color:var(--mut);font-size:12px;min-width:38px}
+.lg-t{font-family:"Space Grotesk",system-ui,sans-serif;color:var(--mut);font-size:12px;min-width:38px}
 .lg-a{font-size:11px;padding:2px 7px;border-radius:6px;background:var(--panel2);color:var(--mut)}
 .lg-alterou{background:#4c8dff22;color:#7aaaff}.lg-cadastrou{background:#3fb95022;color:#5fd36f}.lg-excluiu{background:#f8514922;color:#ff7b72}.lg-entrou{background:#f5a52422;color:#ffc35c}
 .lg-v small{color:var(--mut)}
@@ -323,7 +323,7 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 .lucro-row.pos{background:color-mix(in srgb,#16a34a 11%,transparent);border-left-color:#16a34a}
 .lucro-row.neg{background:color-mix(in srgb,#dc2626 11%,transparent);border-left-color:#dc2626}
 .lucro-row span{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
-.lucro-row b{font-family:"Space Grotesk";font-size:20px;line-height:1.2}
+.lucro-row b{font-family:"Space Grotesk",system-ui,sans-serif;font-size:20px;line-height:1.2}
 .lucro-row.pos>div:first-child b{color:#16a34a}.lucro-row.neg>div:first-child b{color:#dc2626}
 .lucro-row small{display:block;font-size:11px;color:var(--mut)}
 .lucro-row .upd{text-align:right}.lucro-row .upd b{font-size:13px;color:inherit}

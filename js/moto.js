@@ -28,7 +28,7 @@ function renderEditor(){
   const v=editing;if(!v)return;
   const tabs=[["vistoria","🔍 Vistoria"],["numeros","💰 Números","fin"],["leilao","🏁 Leilão","fin"],["dados","📄 Dados"],["docs",`📎 Docs${(v.docs||[]).length?" "+v.docs.length:""}`]];
   $("#sheet").innerHTML=`<div class="shead"><div class="row"><button class="btn ghost sm" id="xClose">← Voltar</button><h2 id="eTitle">${esc(v.modelo||"Novo veículo")}</h2>${v.lote?`<span class="chip st-avaliacao">Lote ${esc(v.lote)}</span>`:""}</div>
-   <div class="summ fin"><div><span>Custo previsto</span><b id="sCusto">—</b></div><div><span>Lance máx. sugerido</span><b id="sLmax">—</b></div><div><span>Lucro líquido · ROI</span><b id="sLucro">—</b></div><div><span>Nota</span><b id="sNota">—</b></div></div>
+   <div class="summ fin"><div><span id="sCustoL">Custo previsto</span><b id="sCusto">—</b></div><div><span>Lance máx. sugerido</span><b id="sLmax">—</b></div><div><span>Lucro líquido · ROI</span><b id="sLucro">—</b></div><div><span>Nota</span><b id="sNota">—</b></div></div>
    <div class="etabs">${tabs.map(([k,l,c])=>`<button data-etab="${k}" class="${etab===k?"on":""} ${c||""}">${l}</button>`).join("")}</div></div>
   <div class="sbody" id="eBody"></div>`;
   renderETab();bindEditor();
@@ -153,11 +153,13 @@ function tabDados(v){
 function refresh(){
   const v=editing;if(!v)return;const c=calc(v);const set=(id,t,cl)=>{const e=$("#"+id);if(e){e.textContent=t;if(cl!==undefined)e.className=cl}};
   const nt=notaFinal(v);
-  set("sCusto",brl(c.custo));set("sLmax",c.lmax?brl(c.lmax):"—");{let lu=c.lucro,ro=c.roi;if(!isFinite(lu)&&(v.status||"avaliacao")==="avaliacao"){const lm=lanceMaxDe(v,c);if(lm){const L=calc({...v,lance:String(lm.valor)});lu=L.lucro;ro=L.roi}}
+  // em avaliação sem lance digitado, os números do arremate simulam o lance máximo
+  const simLm=(v.status||"avaliacao")==="avaliacao"&&!c.lance?lanceMaxDe(v,c):null;const cs=simLm?calc({...v,lance:String(simLm.valor)}):c;
+  set("sCustoL",simLm?"Custo no lance máx.":"Custo previsto");set("sCusto",brl(cs.custo));set("sLmax",c.lmax?brl(c.lmax):"—");{let lu=c.lucro,ro=c.roi;if(!isFinite(lu)&&(v.status||"avaliacao")==="avaliacao"){const lm=lanceMaxDe(v,c);if(lm){const L=calc({...v,lance:String(lm.valor)});lu=L.lucro;ro=L.roi}}
    set("sLucro",isFinite(lu)?`${brl(lu)}${isFinite(ro)?" · "+pct(ro):""}`:"—",isFinite(lu)?(lu>=0?"pos":"neg"):"")}set("sNota",nt!=null?nt.toLocaleString("pt-BR")+"/10":"—");
   set("vLmax",c.lmax?brl(c.lmax):"informe venda alvo ou FIPE");set("lLmax",c.lmax?brl(c.lmax):"informe venda alvo ou FIPE");
-  set("cCom",brl(c.comissao+c.adm));set("cPag",brl(c.pagamento));
-  const cf=$("#cFipe");if(cf)cf.textContent=c.fipe?`Arremate = ${pct(c.pagamento/c.fipe)} da FIPE · custo previsto = ${pct(c.pctFipe)} da FIPE`:"";
+  set("cCom",brl(cs.comissao+cs.adm));set("cPag",brl(cs.pagamento));
+  const cf=$("#cFipe");if(cf)cf.textContent=(simLm?`Simulação no lance máx. ${brl(simLm.valor)} · `:"")+(cs.fipe?`Arremate = ${pct(cs.pagamento/cs.fipe)} da FIPE · custo total = ${pct(cs.pctFipe)} da FIPE`:"");
   ["estetica","documentacao","mecanica","transporte","outros"].forEach(k=>set("sub-"+k,brl(c.porCat[k])));
   set("cMin",brl(c.precoMin));set("cEq",brl(c.custo));
   set("cResL",c.vendido?"✅ Lucro realizado":"📈 Lucro previsto");
@@ -231,7 +233,10 @@ function bindEditor(){
 }
 function keepScroll(fn){const o=$("#ov");const y=o.scrollTop;fn();o.scrollTop=y}
 function closeEditor(){
-  if(editing&&canWrite&&papel!=="vistoriador"){const v=vehicles.find(x=>x.id===editing.id);if(v&&!v.modelo&&!num(v.lance)&&!(v.despesas||[]).length&&!(v.orcado||[]).length&&!srv[v.id]){vehicles=vehicles.filter(x=>x!==v);lsSave()}}
+  if(editing&&canWrite&&papel!=="vistoriador"){const v=vehicles.find(x=>x.id===editing.id);
+    const vazio=v&&!v.modelo&&!v.placa&&!v.chassi&&!v.lote&&!v.link&&!num(v.lance)&&!(v.despesas||[]).length&&!(v.orcado||[]).length&&!(v.fotosRef||[]).length&&!(v.fotosVist||[]).length&&!(v.docs||[]).length;
+    // cadastro aberto e abandonado em branco: não deixa "moto fantasma" na lista
+    if(vazio){if(srv[v.id])removeV(v.id);else{vehicles=vehicles.filter(x=>x!==v);lsSave()}}}
   editing=null;$("#ov").classList.remove("on");document.body.style.overflow="";render();
 }
 let _rec=null;

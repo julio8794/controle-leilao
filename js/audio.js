@@ -4,7 +4,7 @@ const CK_NOME=k=>((CHECKS.find(c=>c[0]===k)||[0,k])[1]);
 const ST_NOME={ok:"✓ OK",at:"⚠ Atenção",pb:"✕ Problema"};
 function arqB64(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(",")[1]);r.onerror=()=>rej(new Error("Não consegui ler "+f.name));r.readAsDataURL(f)})}
 function duracao(f){return new Promise(res=>{const a=document.createElement("audio");const u=URL.createObjectURL(f);a.preload="metadata";a.onloadedmetadata=()=>{const d=isFinite(a.duration)?a.duration:0;URL.revokeObjectURL(u);res(d)};a.onerror=()=>{URL.revokeObjectURL(u);res(0)};a.src=u;setTimeout(()=>res(0),5000)})}
-const motosAud=()=>vehicles.filter(v=>!aud.grupo||v.grupoId===aud.grupo);
+const motosAud=()=>vehicles.filter(v=>(v.status||"avaliacao")==="avaliacao"&&(!aud.grupo||v.grupoId===aud.grupo));
 function contextoAud(){const ms=motosAud();return "Vistoria de motos em pátio de leilão. Motos: "+ms.map(v=>[v.lote,v.modelo,v.cor].filter(Boolean).join(" ")).join("; ")+". Termos: lote, chassi, motor, bengala, relação, coroa, pinhão, carenagem, retrovisor, para-lama, tanque, pneu, freio, pastilha, painel, partida, embreagem."}
 function abrirAudio(gid){
   if(!podeGerir())return;aud={grupo:gid||fgrupoId||"",itens:[],ocupado:false,res:null};renderAudio();
