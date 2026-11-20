@@ -25,6 +25,14 @@ function casarLote(v,lotes){
     if(am&&anoModelo(l.ano)===am)s+=2;if(num(v.lanceMin)&&num(v.lanceMin)===l.lanceMin)s+=2;if(v.chassi&&norm(v.chassi)===norm(l.chassi))s+=10;if(v.placa&&norm(v.placa)===norm(l.placa))s+=10;return s};
   let cand=lotes.filter(l=>(n&&+l.lote===n)||(v.chassi&&norm(v.chassi)===norm(l.chassi))||(v.placa&&v.placa.length>=7&&norm(v.placa)===norm(l.placa)));
   if(!cand.length)return null;
+  // 1) pátios da cidade do grupo têm prioridade
+  const g=grupoDe(v);const cid=g?norm(g.cidade||g.nome).split(" ")[0]:"";
+  if(cid){const daCid=cand.filter(l=>norm(l.patio).includes(cid));if(daCid.length)cand=daCid}
+  // 2) prefixo do leilão no site (ex.: 230-, 231-) → pátio, aprendido das motos já casadas do mesmo grupo
+  const pref=String(v.lote||"").includes("-")?String(v.lote).split("-")[0]:"";
+  if(pref){const vis=vehicles.filter(x=>x!==v&&x.grupoId===v.grupoId&&x.editalLote&&String(x.lote||"").startsWith(pref+"-")).map(x=>x.editalLote.patio);
+    const doPref=vis.length?cand.filter(l=>vis.includes(l.patio)):[];if(doPref.length)cand=doPref;
+    else{const outros=new Set(vehicles.filter(x=>x!==v&&x.grupoId===v.grupoId&&x.editalLote&&!String(x.lote||"").startsWith(pref+"-")).map(x=>x.editalLote.patio));const livres=cand.filter(l=>!outros.has(l.patio));if(livres.length)cand=livres}}
   cand=cand.map(l=>({l,s:pont(l)})).sort((a,b)=>b.s-a.s);
   const [a,b]=cand;if(a.s<4)return {duvida:true,cands:cand.slice(0,3).map(x=>x.l)};
   if(b&&a.s-b.s<1.5)return {duvida:true,cands:[a.l,b.l]};
