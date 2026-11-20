@@ -10,6 +10,10 @@ const LIMITE = Number(Deno.env.get("IA_LIMITE_DIA") || 150);
 const json = (o: unknown, s = 200) => new Response(JSON.stringify(o), { status: s, headers: { ...CORS, "Content-Type": "application/json" } });
 const erro = (m: string, s = 400) => json({ erro: m }, s);
 
+// chave da plataforma de consultas: segredo BIGTECH_API_KEY (ou "Chave", nome usado no cadastro)
+const chaveBigTech = () => (Deno.env.get("BIGTECH_API_KEY") || Deno.env.get("Chave") || "").trim();
+// chave da OpenAI: OPENAI_API_KEY ou, na falta, o segredo que começa com sk- (nunca a da plataforma de consultas)
+const chaveOpenAI = () => Deno.env.get("OPENAI_API_KEY") || Object.entries(Deno.env.toObject()).find(([k, v]) => !["BIGTECH_API_KEY", "Chave"].includes(k) && /^sk-[A-Za-z0-9_-]{20,}/.test(String(v).trim()))?.[1]?.trim();
 // ---------- preços (US$ por 1 milhão de tokens: entrada, entrada em cache, saída) ----------
 // Fonte: developers.openai.com/api/docs/pricing (nov/2026). Atualize aqui se a OpenAI mudar.
 const PRECOS: [RegExp, number, number, number][] = [
@@ -77,7 +81,7 @@ async function openai(system: string, content: any[], nome: string, schema: any,
   return await chamarOpenAI({ model: Deno.env.get("OPENAI_MODEL") || ag?.modelo || MODEL, input: [{ role: "system", content: [{ type: "input_text", text: system }] }, { role: "user", content }], text: { format: { type: "json_schema", name: nome, strict: true, schema } } });
 }
 async function chamarOpenAI(corpo: any) {
-  const key = Deno.env.get("OPENAI_API_KEY") || Object.values(Deno.env.toObject()).find(v => /^sk-[A-Za-z0-9_-]{20,}/.test(String(v).trim()))?.trim(); if (!key) throw new Error("Chave da OpenAI não configurada no Supabase (OPENAI_API_KEY)");
+  const key = chaveOpenAI(); if (!key) throw new Error("Chave da OpenAI não configurada no Supabase (OPENAI_API_KEY)");
   const r = await fetch("https://api.openai.com/v1/responses", {
     method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(140000),
     body: JSON.stringify(corpo)
@@ -148,7 +152,7 @@ Escolha o índice (0 a ${c.length - 1}) do candidato que é a MESMA versão (mes
 // ---------- áudio de vistoria ----------
 const PRECO_TRANSC: Record<string, number> = { "gpt-4o-transcribe": 0.006, "gpt-transcribe": 0.0045, "gpt-4o-mini-transcribe": 0.003, "whisper-1": 0.006 };
 async function transcrever(b64: string, nome: string, mime: string, segundos: number, contexto: string) {
-  const key = Deno.env.get("OPENAI_API_KEY") || Object.values(Deno.env.toObject()).find(v => /^sk-[A-Za-z0-9_-]{20,}/.test(String(v).trim()))?.trim();
+  const key = chaveOpenAI();
   if (!key) throw new Error("Chave da OpenAI não configurada");
   const bytes = Uint8Array.from(atob(b64 || ""), c => c.charCodeAt(0)); if (!bytes.length) throw new Error("Áudio vazio"); if (bytes.length > 20e6) throw new Error("Áudio maior que 20 MB");
   const modelo = Deno.env.get("TRANSCRIBE_MODEL") || "gpt-4o-transcribe";
@@ -211,7 +215,7 @@ const CONSULTAS: Record<string, { nome: string; entrada: "placa" | "chassi"; pre
   "leilao-base01-score": { nome: "Score de passagem por leilão", entrada: "placa", preco: 4.96 },
 };
 async function consultaVeicular(sbUser: any, email: string, body: any) {
-  const key = Deno.env.get("BIGTECH_API_KEY"); if (!key) throw new Error("Chave da plataforma de consultas não configurada no Supabase (BIGTECH_API_KEY)");
+  const key = chaveBigTech(); if (!key) throw new Error("Chave da plataforma de consultas não configurada no Supabase (BIGTECH_API_KEY)");
   if (!email || !body.senha) throw new Error("Confirme a sua senha");
   const anon = createClient(Deno.env.get("SUPABASE_URL")!, (Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY"))!, { auth: { persistSession: false } });
   const { error: eLogin } = await anon.auth.signInWithPassword({ email, password: String(body.senha) });
