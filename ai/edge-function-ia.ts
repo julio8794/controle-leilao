@@ -47,16 +47,32 @@ async function baixar(u: string, max: number) {
 }
 
 // ---------- OpenAI (Responses API, saída estrita) ----------
-async function openai(system: string, content: any[], nome: string, schema: any) {
+// Agentes publicados na plataforma da OpenAI (Respostas → Prompts). Instruções em ai/agentes/p_*.txt.
+const AGENTES: Record<string, { prompt: string; modelo: string }> = {
+  ler_edital: { prompt: Deno.env.get("PROMPT_LER_EDITAL") || "pmpt_6aff950fd0f481948847945c280c1361055ffbbf3d8005b4", modelo: "gpt-6.2-sol" },
+  importar_lote: { prompt: Deno.env.get("PROMPT_IMPORTAR_LOTE") || "pmpt_6aff9564f2f4819087db1d058af07710078f2f34ff066db9", modelo: "gpt-6-luna" },
+  analisar_fotos: { prompt: Deno.env.get("PROMPT_ANALISAR_FOTOS") || "pmpt_6aff95809a1c8194b72e09a85b69480003274924a703d52b", modelo: "gpt-6.2-sol" },
+  mapear_planilha: { prompt: Deno.env.get("PROMPT_MAPEAR_PLANILHA") || "pmpt_6aff959a109c819392d43d4ef4c665bb025bc8d8b650f83b", modelo: "gpt-6-luna" },
+};
+let AGENTE_ATUAL = "";
+async function openai(system: string, content: any[], nome: string, schema: any, vars?: Record<string, string>) {
+  const ag = AGENTES[AGENTE_ATUAL];
+  if (ag?.prompt) {
+    try { return await chamarOpenAI({ prompt: { id: ag.prompt, ...(vars ? { variables: vars } : {}) }, input: [{ role: "user", content }], text: { format: { type: "json_schema", name: nome, strict: true, schema } } }) }
+    catch (e) { if (!/prompt|not found|404/i.test(String((e as Error).message))) throw e; console.warn("agente indisponível, usando instruções locais:", (e as Error).message) }
+  }
+  return await chamarOpenAI({ model: Deno.env.get("OPENAI_MODEL") || ag?.modelo || MODEL, input: [{ role: "system", content: [{ type: "input_text", text: system }] }, { role: "user", content }], text: { format: { type: "json_schema", name: nome, strict: true, schema } } });
+}
+async function chamarOpenAI(corpo: any) {
   const key = Deno.env.get("OPENAI_API_KEY") || Object.values(Deno.env.toObject()).find(v => /^sk-[A-Za-z0-9_-]{20,}/.test(String(v).trim()))?.trim(); if (!key) throw new Error("Chave da OpenAI não configurada no Supabase (OPENAI_API_KEY)");
   const r = await fetch("https://api.openai.com/v1/responses", {
     method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(140000),
-    body: JSON.stringify({ model: MODEL, input: [{ role: "system", content: [{ type: "input_text", text: system }] }, { role: "user", content }], text: { format: { type: "json_schema", name: nome, strict: true, schema } } })
+    body: JSON.stringify(corpo)
   });
   const d = await r.json(); if (!r.ok) throw new Error("OpenAI: " + (d?.error?.message || r.status));
   let txt = ""; for (const o of d.output || []) for (const c of o.content || []) { if (c.type === "refusal") throw new Error("A IA recusou: " + c.refusal); if (c.type === "output_text") txt += c.text }
   if (!txt) throw new Error("Resposta vazia da IA");
-  return { dados: JSON.parse(txt), uso: { entrada: d.usage?.input_tokens || 0, saida: d.usage?.output_tokens || 0, modelo: d.model || MODEL } };
+  return { dados: JSON.parse(txt), uso: { entrada: d.usage?.input_tokens || 0, cache: d.usage?.input_tokens_details?.cached_tokens || 0, saida: d.usage?.output_tokens || 0, modelo: d.model || MODEL, agente: corpo.prompt ? "plataforma" : "local" } };
 }
 const N = (t: string[]) => ({ type: [...t, "null"] });
 const campo = (tipo: string) => ({ type: "object", additionalProperties: false, required: ["valor", "trecho", "pagina"], properties: { valor: N([tipo]), trecho: N(["string"]), pagina: N(["integer"]) } });
@@ -97,12 +113,17 @@ TAREFA: ler o EDITAL de leilão e extrair as custas e prazos que o arrematante p
 - regras: retirada, circulação, documentação e transferência (resumo fiel, valor = texto curto).
 - NÃO preencha custos de vistoria, transferência ou despachante cobrados por terceiros, pois não fazem parte do edital.
 - obs: avisos curtos sobre conversões feitas ou ambiguidades encontradas.`;
+  // economia: manda só as páginas que tratam de custas/prazos (a verificação continua sobre o texto inteiro)
+  const CHAVE = /comiss|taxa|prazo|pagament|retirad|liberad|transfer|estadia|di[aá]ria|leiloeir|comitente|d[eé]bito|ipva|multa|licenciament|remo[cç][aã]o|sess[aã]o|encerra|data/i;
+  const paginas = texto.split(/(?=\[\[página \d+\]\])/).filter(Boolean);
+  const relevantes = paginas.filter((p, i) => i < 2 || CHAVE.test(p));
+  const enviado = (relevantes.length ? relevantes : paginas).join("\n\n").slice(0, 120000);
   const content = escaneado
     ? [{ type: "input_file", filename: "edital.pdf", file_data: "data:application/pdf;base64," + b64(bytes) }, { type: "input_text", text: instr }]
-    : [{ type: "input_text", text: "FONTE (texto do edital):\n" + texto.slice(0, 180000) }];
+    : [{ type: "input_text", text: "FONTE (texto do edital):\n" + enviado }];
   const { dados, uso } = await openai(escaneado ? REGRAS_GERAIS : instr, content, "edital", schema);
   const fonteN = norm(texto);
-  const out: any = { escaneado, paginas: (texto.match(/\[\[página/g) || []).length, obs: dados.obs || [] };
+  const out: any = { escaneado, paginas: (texto.match(/\[\[página/g) || []).length, paginas_enviadas: escaneado ? null : relevantes.length, obs: dados.obs || [] };
   for (const k of ["comissaoPct", "taxaAdmPct", "prazoPagamentoH", "liberacaoDias", "prazoTransferenciaDias", "diasCarencia", "estadiaDia", "data_leilao", "leiloeiro", "comitente", "cidade", "debitos", "regras"]) {
     const c = dados[k]; out[k] = escaneado ? { ...c, verificado: false, motivo: "PDF escaneado: confira no edital" } : (["debitos", "regras", "leiloeiro", "comitente", "cidade"].includes(k) ? { ...c, verificado: c?.valor ? trechoExiste(fonteN, c.trecho) : false } : verificar(c, fonteN));
   }
@@ -145,7 +166,7 @@ REGRAS INVIOLÁVEIS:
 5. "nome_base": se a peça corresponder a um nome desta lista do painel, copie o nome exato; senão null. Lista: ${JSON.stringify((base || []).slice(0, 200))}
 6. confianca entre 0 e 1. Em dúvida, confiança baixa. Nunca invente.
 Veículo: ${modelo || "não informado"} ${ano || ""}.`;
-  const content: any[] = imgs.map((u, i) => [{ type: "input_text", text: `Foto ${i + 1}:` }, { type: "input_image", image_url: u, detail: "high" }]).flat();
+  const content: any[] = [{ type: "input_text", text: `Veículo: ${modelo || "não informado"} ${ano || ""}\nLISTA_BASE: ${JSON.stringify((base || []).slice(0, 200))}` }, ...imgs.map((u, i) => [{ type: "input_text", text: `Foto ${i + 1}:` }, { type: "input_image", image_url: u, detail: "high" }]).flat()];
   const { dados, uso } = await openai(instr, content, "vistoria_fotos", schema);
   dados.itens = (dados.itens || []).filter((i: any) => i.foto >= 1 && i.foto <= imgs.length && i.evidencia && i.evidencia.length > 8).map((i: any) => ({ ...i, confianca: Math.max(0, Math.min(1, i.confianca)), nome_base: (base || []).includes(i.nome_base) ? i.nome_base : null }));
   return { resultado: dados, uso };
@@ -177,7 +198,9 @@ Deno.serve(async (req) => {
   const hoje = new Date(); hoje.setUTCHours(3, 0, 0, 0); if (hoje > new Date()) hoje.setUTCDate(hoje.getUTCDate() - 1);
   const { count } = await sb.from("ia_uso").select("id", { count: "exact", head: true }).eq("painel_id", painel_id).gte("criado_em", hoje.toISOString());
   if ((count || 0) >= LIMITE) return erro(`Limite diário de ${LIMITE} usos da IA atingido`, 429);
-  const t0 = Date.now();
+  const t0 = Date.now(); AGENTE_ATUAL = acao;
+  const chave = ["ler_edital", "importar_lote"].includes(acao) && body.url ? acao + ":" + body.url : null;
+  if (chave && !body.refazer) { const { data: c } = await sb.from("ia_cache").select("resultado").eq("painel_id", painel_id).eq("chave", chave).gte("criado_em", new Date(Date.now() - 30 * 864e5).toISOString()).maybeSingle(); if (c) return json({ ...c.resultado, _cache: true }) }
   try {
     let r: any;
     if (acao === "ler_edital") r = await lerEdital(body.url);
@@ -186,6 +209,7 @@ Deno.serve(async (req) => {
     else if (acao === "mapear_planilha") r = await mapearPlanilha(body.cabecalhos, body.amostra);
     else return erro("Ação desconhecida");
     await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: r.uso.modelo, tokens_in: r.uso.entrada, tokens_out: r.uso.saida, ms: Date.now() - t0, ok: true });
+    if (chave) await sb.from("ia_cache").upsert({ painel_id, chave, resultado: r.resultado, criado_em: new Date().toISOString() });
     return json({ ...r.resultado, _uso: r.uso });
   } catch (e) {
     await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: MODEL, ms: Date.now() - t0, ok: false, erro: String((e as Error).message).slice(0, 300) });
