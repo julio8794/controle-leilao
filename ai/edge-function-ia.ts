@@ -72,6 +72,7 @@ const AGENTES: Record<string, { prompt: string; modelo: string }> = {
   analisar_fotos: { prompt: Deno.env.get("PROMPT_ANALISAR_FOTOS") || "pmpt_6aff95809a1c8194b72e09a85b69480003274924a703d52b", modelo: "gpt-6.2-sol" },
   escolher_fipe: { prompt: Deno.env.get("PROMPT_ESCOLHER_FIPE") || "", modelo: "gpt-6-luna" },
   extrair_vistoria: { prompt: Deno.env.get("PROMPT_EXTRAIR_VISTORIA") || "", modelo: "gpt-6.2-sol" },
+  ler_nota: { prompt: Deno.env.get("PROMPT_LER_NOTA") || "", modelo: "gpt-6.2-sol" },
   mapear_planilha: { prompt: Deno.env.get("PROMPT_MAPEAR_PLANILHA") || "pmpt_6aff959a109c819392d43d4ef4c665bb025bc8d8b650f83b", modelo: "gpt-6-luna" },
 };
 let AGENTE_ATUAL = "";
@@ -387,6 +388,74 @@ Use as linhas de amostra só para entender o significado. Em dúvida, campo null
 }
 function b64(b: Uint8Array) { let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s) }
 
+
+// ---------- nota de arremate (PDF por código; foto ou PDF escaneado pela IA) ----------
+// Nunca devolve dados pessoais do arrematante (nome, CPF, RG, endereço, telefone): só o veículo, o leilão e os valores.
+
+async function linhasPdfDoc(pdf: any): Promise<string[]> {const linhas: string[] = [];
+  for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const c=await pg.getTextContent();
+    const its=c.items.filter(x=>x.str&&x.str.trim()).map(x=>({s:x.str,x:x.transform[4],y:x.transform[5],w:x.width||0}));
+    const grupos=[];its.sort((a,b)=>b.y-a.y||a.x-b.x).forEach(it=>{const g=grupos.find(g=>Math.abs(g.y-it.y)<3);if(g)g.it.push(it);else grupos.push({y:it.y,it:[it]})});
+    grupos.sort((a,b)=>b.y-a.y).forEach(g=>{g.it.sort((a,b)=>a.x-b.x);let s="",fim=null;g.it.forEach(it=>{if(fim!=null)s+=it.x-fim>4?"   ":"";s+=it.s;fim=it.x+it.w});linhas.push(s)})}
+  return linhas}
+function lerNotaTexto(linhas: string[]): any {
+  const T=linhas.join("\n"),U=T.toUpperCase(),plano=T.replace(/\s+/g," ");
+  const brN=s=>s==null?null:+String(s).replace(/\./g,"").replace(",",".");
+  const m=(re,s=T)=>{const r=s.match(re);return r?r[1].trim():null};
+  const campo=k=>m(new RegExp("^.*?"+k+"\\.*\\s*:\\s*(.+?)(?:\\s{3,}.*)?$","mi"));
+  const iLe=linhas.findIndex(l=>/LEILOEIR[OA]\s+OFICIAL/i.test(l));
+  let leiloeiro=null;for(let j=iLe-1;j>=0&&j>=iLe-4;j--){const l=linhas[j].trim().split(/\s{3,}/)[0];if(l&&!/NOTA DE ARREMAT|N[UÚ]MERO|VIA\s*-|CPF|CNPJ|JUCE/i.test(l)){leiloeiro=l;break}}
+  const cid=T.match(/CEP\s*[\d.\-]+\s+([A-Za-zÀ-ú .'']+?)\s*[-\/]\s*([A-Z]{2})\b/);
+  // um bloco por veículo (cada "MARCA...:")
+  const iM=linhas.map((l,i)=>/MARCA\.*\s*:/i.test(l)?i:-1).filter(i=>i>=0);
+  const veic=iM.map((i,k)=>{let f=iM[k+1]??Math.min(linhas.length,i+14);for(let j=i+1;j<f;j++)if(/COMITENTE|SUB-?TOTAL|^\s*LOTE\s|DECLARO/i.test(linhas[j])){f=j;break}const bloco=linhas.slice(i,f);const B=bloco.join("\n");
+    const c=k2=>{const r=B.match(new RegExp("^.*?"+k2+"\\.*\\s*:\\s*(.+?)(?:\\s{3,}.*)?$","mi"));return r?r[1].trim():null};
+    const l0=linhas[i];const pre=l0.split(/MARCA/i)[0].trim().split(/\s+/).filter(x=>/^\d+[A-Z\-]*$/i.test(x));
+    const din=t=>[...t.matchAll(/(?:^|\s)(\d{1,3}(?:\.\d{3})*,\d{2})(?=\s|$)/g)].map(x=>brN(x[1]));const v0=din(l0);const vals=v0.length?v0:[...B.matchAll(/(?:^|\s)(\d{1,3}(?:\.\d{3})*,\d{2})(?=\s|$)/g)].map(x=>brN(x[1]));
+    const chassi=(c("CHASSI")||"").replace(/\s/g,"").toUpperCase()||null;
+    return {lote:pre[0]||null,patrimonio:pre[1]||null,marca:c("MARCA"),modelo:c("MODELO"),placa:(c("PLACA")||"").replace(/[^A-Z0-9]/gi,"").toUpperCase()||null,chassi,
+      renavam:(c("RENAVAM")||"").replace(/\D/g,"")||null,motor:c("MOTOR"),cor:c("COR"),ano:c("ANO(?:\\s*/\\s*MOD(?:ELO)?)?|ANO FAB(?:RICA[CÇ][AÃ]O)?"),combustivel:c("COMBUST[IÍ]VEL"),
+      situacao:c("SITUA[CÇ][AÃ]O(?: DO VE[IÍ]CULO)?"),lance:vals.length?vals[vals.length-1]:null}});
+  const sub=brN(m(/SUB-?TOTAL\s*:\s*([\d.]+,\d{2})/i)),com=T.match(/COMISS[AÃ]O\s*(\d+(?:[.,]\d+)?)\s*%\s*:\s*([\d.]+,\d{2})/i),tot=brN(m(/(?:^|\s)TOTAL\s*:\s*([\d.]+,\d{2})/mi));
+  if(veic.length===1&&!veic[0].lance&&sub)veic[0].lance=sub;
+  const dl=m(/DATA DO LEIL[AÃ]O\s*:\s*(\d{2}\/\d{2}\/\d{2,4})/i);
+  const iso=d=>{if(!d)return null;let[a,b,c]=d.split("/");if(c.length===2)c="20"+c;return `${c}-${b}-${a}`};
+  return {numero:m(/N[UÚ]MERO\s*:\s*(\d+)/i),leiloeiro,cidade:cid?cid[1].trim():null,uf:cid?cid[2]:null,
+    leilao:m(/N[º°O]\.?\s*LEIL[AÃ]O\s*:\s*(\d+)/i),comitente:m(/COMITENTE\s*:\s*(\d+)/i),data_leilao:iso(dl),emissao:iso(m(/EMISS[AÃ]O\s*:\s*(\d{2}\/\d{2}\/\d{2,4})/i)),
+    veiculos:veic,subtotal:sub,comissao_pct:com?+com[1].replace(",","."):null,comissao_valor:com?brN(com[2]):null,total:tot,
+    retirada_dias:+(m(/prazo de\s*(\d+)[^.]{0,40}?dias[^.]{0,60}?retirada/i,plano)||0)||null,
+    estadia_moto:brN(m(/R\$\s*([\d.]+,\d{2})[^;]{0,60}?ao dia para motocicletas/i,plano)),
+    estadia_carro:brN(m(/R\$\s*([\d.]+,\d{2})[^;]{0,60}?ao dia para autom[oó]veis/i,plano)),
+    perda_dias:+(m(/Decorridos\s*(\d+)[^,]{0,25}dias/i,plano)||0)||null,
+    patio:m(/p[aá]tio d[oa]s?\s+([A-ZÀ-Ú][\wÀ-ú ]{2,40}?)(?:,|\.|\s+fixada)/i,plano)}}
+
+async function lerNota(arquivo: string, mime: string, nome: string) {
+  if (!arquivo) throw new Error("Arquivo da nota não enviado");
+  const bytes = Uint8Array.from(atob(arquivo), c => c.charCodeAt(0));
+  if (bytes.length > 15e6) throw new Error("Arquivo acima de 15 MB");
+  const ehPdf = /pdf/i.test(mime) || /\.pdf$/i.test(nome || "");
+  if (ehPdf) {
+    try {
+      const pdf = await getDocumentProxy(bytes); const ls = await linhasPdfDoc(pdf); const r = lerNotaTexto(ls);
+      if (r.veiculos.some((v: any) => v.chassi || v.placa)) return { resultado: { ...r, metodo: "codigo" }, uso: { agente: "codigo", modelo: "sem IA (nota)", entrada: 0, cache: 0, saida: 0 } };
+    } catch (e) { console.warn("nota: leitura por código falhou", (e as Error).message) }
+  }
+  const s = (t: string) => ({ type: [t, "null"] });
+  const schema = obj({
+    numero: s("string"), leiloeiro: s("string"), cidade: s("string"), uf: s("string"), leilao: s("string"), comitente: s("string"), data_leilao: s("string"), emissao: s("string"),
+    veiculos: { type: "array", items: obj({ lote: s("string"), patrimonio: s("string"), marca: s("string"), modelo: s("string"), placa: s("string"), chassi: s("string"), renavam: s("string"), motor: s("string"), cor: s("string"), ano: s("string"), combustivel: s("string"), situacao: s("string"), lance: s("number") }) },
+    subtotal: s("number"), comissao_pct: s("number"), comissao_valor: s("number"), total: s("number"), retirada_dias: s("integer"), estadia_moto: s("number"), estadia_carro: s("number"), perda_dias: s("integer"), patio: s("string")
+  });
+  const instr = `${REGRAS_GERAIS}
+Você recebe uma NOTA DE ARREMATAÇÃO (recibo de leilão de veículos). Extraia apenas os dados do LEILÃO, do(s) VEÍCULO(S) e dos VALORES.
+NÃO extraia dados do arrematante (nome, CPF, RG, endereço, telefone): eles não existem neste formato de resposta.
+Datas no formato AAAA-MM-DD. Valores em reais como número (9.200,00 → 9200). "lance" é o valor do lance do veículo; "comissao_pct" é o percentual da comissão do leiloeiro.
+"retirada_dias" é o prazo para retirar o bem; "estadia_moto"/"estadia_carro" são as diárias de pátio após o prazo; "perda_dias" é quando o arrematante perde o bem. "patio" é o nome do pátio/local de retirada. Campos ausentes = null.`;
+  const anexo = ehPdf ? { type: "input_file", filename: nome || "nota.pdf", file_data: "data:application/pdf;base64," + arquivo } : { type: "input_image", image_url: `data:${mime || "image/jpeg"};base64,${arquivo}` };
+  const r = await openai(instr, [anexo, { type: "input_text", text: "Extraia os dados desta nota de arrematação." }], "nota_arremate", schema);
+  return { resultado: { ...r.dados, metodo: "ia" }, uso: r.uso };
+}
+
 // ---------- servidor ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -421,6 +490,7 @@ Deno.serve(async (req) => {
     else if (acao === "extrair_vistoria") r = await extrairVistoria(body.texto, body.motos);
     else if (acao === "importar_lote") r = await importarLote(body.url);
     else if (acao === "analisar_fotos") r = await analisarFotos(body.imagens, body.modelo, body.ano, body.base);
+    else if (acao === "ler_nota") r = await lerNota(body.arquivo, body.mime, body.nome);
     else if (acao === "mapear_planilha") r = await mapearPlanilha(body.cabecalhos, body.amostra);
     else return erro("Ação desconhecida");
     const custo = r.uso.agente === "codigo" ? 0 : r.uso.custo_fixo != null ? r.uso.custo_fixo : custoUSD(r.uso.modelo, r.uso.entrada, r.uso.cache || 0, r.uso.saida);

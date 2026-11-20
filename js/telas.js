@@ -106,7 +106,7 @@ function bindMain(){
   document.querySelectorAll("[data-vm]").forEach(x=>x.onclick=()=>{vmodo=x.dataset.vm;renderBg()});
   const te=$("#teto");if(te)te.onchange=()=>{try{localStorage.setItem("leilaoTeto_"+(fgrupoId||"todos"),String(num(te.value)))}catch(e){}renderBg()};
   document.querySelectorAll("[data-pkg]").forEach(x=>x.onclick=()=>importarPacote(x.dataset.pkg));
-  const en=$("#eNew");if(en)en.onclick=newV;
+  const en=$("#eNew");if(en)en.onclick=abrirNovo;
   const il=$("#impLink");if(il)il.onclick=abrirImportLink;const ip=$("#impPl");if(ip)ip.onclick=abrirImportPlanilha;const ep=$("#expPl");if(ep)ep.onclick=exportarPlanilha;
   const ed=$("#eDemo");if(ed)ed.style.display="none";
 }
