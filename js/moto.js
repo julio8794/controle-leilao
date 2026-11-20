@@ -23,7 +23,7 @@ function openEditor(id,isNew){
 }
 function renderEditor(){
   const v=editing;if(!v)return;
-  const tabs=[["vistoria","🔍 Vistoria"],["numeros","💰 Números","fin"],["leilao","🏁 Leilão","fin"],["dados","📄 Dados"]];
+  const tabs=[["vistoria","🔍 Vistoria"],["numeros","💰 Números","fin"],["leilao","🏁 Leilão","fin"],["dados","📄 Dados"],["docs",`📎 Docs${(v.docs||[]).length?" "+v.docs.length:""}`]];
   $("#sheet").innerHTML=`<div class="shead"><div class="row"><button class="btn ghost sm" id="xClose">← Voltar</button><h2 id="eTitle">${esc(v.modelo||"Novo veículo")}</h2>${v.lote?`<span class="chip st-avaliacao">Lote ${esc(v.lote)}</span>`:""}</div>
    <div class="summ fin"><div><span>Custo previsto</span><b id="sCusto">—</b></div><div><span>Lance máx.</span><b id="sLmax">—</b></div><div><span>Lucro · ROI</span><b id="sLucro">—</b></div><div><span>Nota</span><b id="sNota">—</b></div></div>
    <div class="etabs">${tabs.map(([k,l,c])=>`<button data-etab="${k}" class="${etab===k?"on":""} ${c||""}">${l}</button>`).join("")}</div></div>
@@ -32,7 +32,7 @@ function renderEditor(){
 }
 function renderETab(){
   const v=editing;const b=$("#eBody");
-  b.innerHTML=etab==="vistoria"?tabVistoria(v):etab==="numeros"?tabNumeros(v):etab==="leilao"?tabLeilao(v):tabDados(v);
+  b.innerHTML=etab==="vistoria"?tabVistoria(v):etab==="numeros"?tabNumeros(v):etab==="leilao"?tabLeilao(v):etab==="docs"?tabDocs(v):tabDados(v);
   if(etab==="vistoria"){vistRefresh();renderVF()}
   if(etab==="numeros"){renderFipe()}
   if(!canWrite)b.querySelectorAll("input,select,textarea").forEach(e=>e.disabled=true);

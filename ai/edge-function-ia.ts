@@ -72,6 +72,7 @@ const AGENTES: Record<string, { prompt: string; modelo: string }> = {
   analisar_fotos: { prompt: Deno.env.get("PROMPT_ANALISAR_FOTOS") || "pmpt_6aff95809a1c8194b72e09a85b69480003274924a703d52b", modelo: "gpt-6.2-sol" },
   escolher_fipe: { prompt: Deno.env.get("PROMPT_ESCOLHER_FIPE") || "", modelo: "gpt-6-luna" },
   extrair_vistoria: { prompt: Deno.env.get("PROMPT_EXTRAIR_VISTORIA") || "", modelo: "gpt-6.2-sol" },
+  ler_documento: { prompt: Deno.env.get("PROMPT_LER_DOCUMENTO") || "", modelo: "gpt-6.2-sol" },
   ler_nota: { prompt: Deno.env.get("PROMPT_LER_NOTA") || "", modelo: "gpt-6.2-sol" },
   mapear_planilha: { prompt: Deno.env.get("PROMPT_MAPEAR_PLANILHA") || "pmpt_6aff959a109c819392d43d4ef4c665bb025bc8d8b650f83b", modelo: "gpt-6-luna" },
 };
@@ -456,6 +457,47 @@ Datas no formato AAAA-MM-DD. Valores em reais como número (9.200,00 → 9200). 
   return { resultado: { ...r.dados, metodo: "ia" }, uso: r.uso };
 }
 
+
+// ---------- documentos do veículo (CRLV, CRV/ATPV, laudo, recibos, notas fiscais, débitos, comprovantes) ----------
+const TIPOS_DOC = ["nota_arremate", "crlv", "crv_atpv", "laudo_cautelar", "laudo_vistoria_detran", "recibo_despesa", "nota_fiscal", "orcamento", "comprovante_pagamento", "debitos_detran", "consulta_veicular", "edital", "outro"];
+async function lerDocumento(arquivo: string, mime: string, nome: string) {
+  if (!arquivo) throw new Error("Arquivo não enviado");
+  const bytes = Uint8Array.from(atob(arquivo), c => c.charCodeAt(0));
+  if (bytes.length > 15e6) throw new Error("Arquivo acima de 15 MB");
+  const ehPdf = /pdf/i.test(mime) || /\.pdf$/i.test(nome || "");
+  if (ehPdf) {
+    try {
+      const pdf = await getDocumentProxy(bytes); const ls = await linhasPdfDoc(pdf);
+      if (/NOTA\s+DE\s+ARREMAT/i.test(ls.join(" "))) { const r = lerNotaTexto(ls); if (r.veiculos.some((v: any) => v.chassi || v.placa)) return { resultado: { tipo: "nota_arremate", nota: { ...r, metodo: "codigo" }, resumo: `Nota de arrematação nº ${r.numero || "?"}`, metodo: "codigo" }, uso: { agente: "codigo", modelo: "sem IA (nota)", entrada: 0, cache: 0, saida: 0 } } }
+    } catch (e) { console.warn("documento: leitura por código falhou", (e as Error).message) }
+  }
+  const s = (t: string) => ({ type: [t, "null"] });
+  const schema = obj({
+    tipo: { type: "string", enum: TIPOS_DOC }, titulo: { type: "string" }, emissor: s("string"), data_documento: s("string"),
+    veiculo: obj({ placa: s("string"), chassi: s("string"), renavam: s("string"), motor: s("string"), cor: s("string"), ano_fabricacao: s("string"), ano_modelo: s("string"), combustivel: s("string"), uf: s("string"), marca_modelo: s("string"), km: s("number"), situacao: s("string") }),
+    despesas: { type: "array", items: obj({ descricao: { type: "string" }, categoria: { type: "string", enum: ["estetica", "documentacao", "mecanica", "transporte", "outros"] }, valor: { type: "number" }, data: s("string") }) },
+    debitos: { type: "array", items: obj({ tipo: { type: "string", enum: ["ipva", "licenciamento", "multa", "seguro_dpvat", "taxa_detran", "outro"] }, descricao: { type: "string" }, valor: { type: "number" }, vencimento: s("string") }) },
+    pagamentos: { type: "array", items: obj({ descricao: { type: "string" }, valor: { type: "number" }, data: s("string") }) },
+    laudo: obj({ resultado: { type: ["string", "null"], enum: ["aprovado", "aprovado_com_apontamentos", "reprovado", null] }, apontamentos: { type: "array", items: { type: "string" } } }),
+    alertas: { type: "array", items: { type: "string" } },
+    resumo: { type: "string" }
+  });
+  const instr = `${REGRAS_GERAIS}
+Você recebe UM documento ligado a um veículo comprado em leilão (CRLV, CRV/ATPV, laudo cautelar ou de vistoria, recibo, nota fiscal de peças/serviços, orçamento, comprovante de pagamento, extrato de débitos do DETRAN, consulta veicular etc.).
+1. "tipo": classifique o documento. "titulo": nome curto do documento (ex.: "CRLV-e 2025", "NF peças Moto Center").
+2. "veiculo": só dados do VEÍCULO escritos no documento (placa, chassi, renavam, nº do motor, cor, anos, combustível, UF, marca/modelo, km, situação como "sinistrado", "recuperado de sinistro", "remarcado"). Ausente = null.
+3. "despesas": SOMENTE em recibo, nota fiscal ou comprovante de serviço/peça já pago: cada item ou o total, com categoria (estetica = pintura/polimento/peças de acabamento; mecanica = peças e serviços mecânicos/elétricos; documentacao = despachante, vistoria, transferência, taxas; transporte = frete/guincho). Orçamento NÃO é despesa: use "debitos" apenas para débitos do veículo e deixe despesas vazio no orçamento, descrevendo os itens no resumo.
+4. "debitos": IPVA, licenciamento, multas, taxas pendentes informados no documento.
+5. "pagamentos": valores pagos que aparecem em comprovantes (PIX, boleto, transferência).
+6. "laudo": resultado e apontamentos de laudo cautelar/vistoria; senão resultado null e lista vazia.
+7. "alertas": fatos graves escritos no documento (roubo/furto, sinistro, perda total, remarcação, restrição judicial, alienação, divergência de chassi/motor). Lista vazia se nada.
+8. NUNCA copie dados pessoais (nome, CPF/CNPJ de pessoa física, RG, endereço, telefone, e-mail): este formato não tem campos para isso.
+9. Datas AAAA-MM-DD; valores em reais como número. "resumo": 1 ou 2 frases do que o documento diz sobre o veículo.`;
+  const anexo = ehPdf ? { type: "input_file", filename: nome || "documento.pdf", file_data: "data:application/pdf;base64," + arquivo } : { type: "input_image", image_url: `data:${mime || "image/jpeg"};base64,${arquivo}`, detail: "high" };
+  const r = await openai(instr, [anexo, { type: "input_text", text: "Extraia os dados deste documento do veículo." }], "documento_veiculo", schema);
+  return { resultado: { ...r.dados, metodo: "ia" }, uso: r.uso };
+}
+
 // ---------- servidor ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -490,6 +532,7 @@ Deno.serve(async (req) => {
     else if (acao === "extrair_vistoria") r = await extrairVistoria(body.texto, body.motos);
     else if (acao === "importar_lote") r = await importarLote(body.url);
     else if (acao === "analisar_fotos") r = await analisarFotos(body.imagens, body.modelo, body.ano, body.base);
+    else if (acao === "ler_documento") r = await lerDocumento(body.arquivo, body.mime, body.nome);
     else if (acao === "ler_nota") r = await lerNota(body.arquivo, body.mime, body.nome);
     else if (acao === "mapear_planilha") r = await mapearPlanilha(body.cabecalhos, body.amostra);
     else return erro("Ação desconhecida");

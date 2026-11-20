@@ -12,7 +12,7 @@ function abrirNovo(){
   if(!podeGerir())return;nn=null;
   $("#sheet").innerHTML=`<div class="shead"><div class="row"><button class="btn ghost sm" id="nvX">← Voltar</button><h2>＋ Novo veículo</h2></div></div><div class="sbody">
    <div class="nv-opts">
-    <label class="nv-op destaque"><span class="ic">📄</span><b>Nota de arremate</b><small>PDF ou foto da nota. Preenche lance, comissão, lote, placa e chassi, e busca FIPE e dados pelo chassi.</small><input type="file" id="nvNota" accept="application/pdf,.pdf,image/*" hidden></label>
+    <label class="nv-op destaque"><span class="ic">📄</span><b>Nota de arremate + documentos</b><small>Escolha a nota (PDF ou foto) e, se quiser, junto o CRLV, laudo, recibos e notas fiscais. Preenche lance, comissão, lote, placa e chassi, busca FIPE pelo chassi e lê os outros documentos.</small><input type="file" id="nvNota" accept="application/pdf,.pdf,image/*" multiple hidden></label>
     <button class="nv-op" id="nvLink"><span class="ic">🔗</span><b>Link do lote</b><small>Cole o link do leiloeiro: fotos, dados e lance vêm do site.</small></button>
     <button class="nv-op" id="nvMan"><span class="ic">✍</span><b>Preencher manualmente</b><small>Cadastro em branco para digitar os dados.</small></button>
    </div><div id="nvSt"></div></div>`;
@@ -20,14 +20,19 @@ function abrirNovo(){
 }
 function fecharNovo(){nn=null;$("#ov").classList.remove("on");document.body.style.overflow="";render()}
 const lerB64=f=>new Promise((ok,ko)=>{const r=new FileReader();r.onload=()=>ok(String(r.result).split(",")[1]);r.onerror=()=>ko(new Error("Não consegui ler o arquivo"));r.readAsDataURL(f)});
-async function lerNotaArquivo(f){
+async function lerNotaArquivo(files){
   const st=$("#nvSt");const say=h=>{if(st)st.innerHTML=h};
-  if(!f)return;if(f.size>15e6)return say(`<div class="ia-box neg">Arquivo com ${(f.size/1e6).toFixed(1)} MB: o limite é 15 MB.</div>`);
-  say(`<div class="ia-box">📄 Lendo ${esc(f.name)}…</div>`);
-  try{const arquivo=await lerB64(f);const r=await chamarIA("ler_nota",{arquivo,mime:f.type,nome:f.name,ref:"nota: "+f.name});
-    if(!r.veiculos||!r.veiculos.length)return say(`<div class="ia-box neg">Não encontrei veículo nessa nota. Confira se é a nota de arrematação.</div>`);
-    nn={nota:r,arquivo:f.name,itens:r.veiculos.map(x=>novoDaNota(r,x))};renderNota()}
-  catch(e){say(`<div class="ia-box neg">⚠ ${esc(e.message)}</div>`)}
+  files=[...(files||[])];if(!files.length)return;
+  const grande=files.find(f=>f.size>15e6);if(grande)return say(`<div class="ia-box neg">${esc(grande.name)} tem ${(grande.size/1e6).toFixed(1)} MB: o limite é 15 MB.</div>`);
+  // a nota primeiro: PDFs antes de fotos (PDF é lido sem IA)
+  const ordem=files.slice().sort((a,b)=>(/pdf/i.test(b.type)?1:0)-(/pdf/i.test(a.type)?1:0));
+  let achou=null,ultimoErro="";
+  for(const f of ordem){say(`<div class="ia-box">📄 Procurando a nota de arremate: ${esc(f.name)}…</div>`);
+    try{const r=await chamarIA("ler_nota",{arquivo:await lerB64(f),mime:f.type,nome:f.name,ref:"nota: "+f.name});
+      if(r.veiculos&&r.veiculos.some(x=>x.chassi||x.placa)&&(r.numero||r.total||r.subtotal||r.veiculos.some(x=>x.lance))){achou={f,r};break}}
+    catch(e){ultimoErro=e.message}}
+  if(!achou)return say(`<div class="ia-box neg">Não encontrei uma nota de arremate nesses arquivos${ultimoErro?` (${esc(ultimoErro)})`:""}. Para cadastrar só com outros documentos, use "Preencher manualmente" e depois a aba 📎 Docs do veículo.</div>`);
+  nn={nota:achou.r,arquivo:achou.f.name,notaFile:achou.f,extras:files.filter(f=>f!==achou.f),itens:achou.r.veiculos.map(x=>novoDaNota(achou.r,x))};renderNota()
 }
 function novoDaNota(n,x){
   const d=decodChassi(x.chassi);const ac=achadosChassi(x.chassi,x.placa);
@@ -53,6 +58,7 @@ function renderNota(){
     <div class="mini">${n.metodo==="ia"?"Lida pela IA (foto ou PDF escaneado): confira os campos.":"Lida direto do PDF, sem IA e sem custo."} Os dados pessoais da nota não são salvos.</div>
    </fieldset>
    ${nn.itens.map((it,i)=>itemNotaHTML(it,i)).join("")}
+   ${nn.extras.length?`<fieldset><legend>📎 Outros documentos (${nn.extras.length})</legend><div class="mini">${nn.extras.map(f=>esc(f.name)).join(" · ")}</div><div class="mini">Serão lidos depois do cadastro, na aba 📎 Docs da moto, para você conferir antes de aplicar.</div></fieldset>`:""}
    <div class="toolbar" style="margin-top:14px"><button class="btn" id="nvSalvar">✓ Cadastrar ${nn.itens.length>1?nn.itens.length+" veículos":"veículo"} como arrematado</button><button class="btn ghost" id="nvX2">Cancelar</button></div>
    <div id="nvSt"></div></div>`;
 }
@@ -86,9 +92,13 @@ async function salvarNota(){
     const linha=`Nota de arremate nº ${n.numero||"?"} · leilão nº ${n.leilao||"?"}${n.total&&n.veiculos.length===1?` · total pago ${brl(n.total)}`:""}`;
     if(!(v.obs||"").includes(linha))v.obs=((v.obs||"")+(v.obs?"\n":"")+linha).trim();
     persist(v);criados.push(v)}
+  const extras=nn.extras||[],notaFile=nn.notaFile;
   fecharNovo();tab="veiculos";render();toast(`${criados.length} veículo(s) arrematado(s) cadastrado(s) ✓ · buscando FIPE pelo chassi…`);
+  // guarda a própria nota nos documentos (bucket privado) e lê os demais
+  for(const v of criados){if(notaFile){try{const up=await enviarDocArquivo(v,notaFile);v.docs=v.docs||[];if(!v.docs.some(d=>d.tipo==="nota_arremate"&&d.nome===notaFile.name))v.docs.push({id:uid(),nome:notaFile.name,path:up.path||"",semArquivo:up.erro||"",tipo:"nota_arremate",titulo:`Nota de arremate nº ${n.numero||"?"}`,data:n.emissao||n.data_leilao||"",emissor:n.leiloeiro?titulo(n.leiloeiro):"",resumo:"",alertas:[],propostas:[],aplicado:true,metodo:n.metodo,em:new Date().toISOString()});persist(v)}catch(e){}}}
+  if(criados.length===1){openEditor(criados[0].id);if(extras.length){etab="docs";renderEditor();processarDocs(criados[0],extras)}}
   for(const v of criados){try{await completarDados(v)}catch(e){}}
-  render();if(criados.length===1)openEditor(criados[0].id);
+  render();
 }
 document.addEventListener("click",e=>{const b=e.target.closest("#nvX,#nvX2,#nvLink,#nvMan,#nvSalvar");if(!b)return;
   if(b.id==="nvX"||b.id==="nvX2")return fecharNovo();
@@ -96,7 +106,7 @@ document.addEventListener("click",e=>{const b=e.target.closest("#nvX,#nvX2,#nvLi
   if(b.id==="nvMan"){fecharNovo();return newV()}
   if(b.id==="nvSalvar"){b.disabled=true;b.textContent="Salvando…";salvarNota()}});
 document.addEventListener("change",e=>{const t=e.target;
-  if(t.id==="nvNota")return lerNotaArquivo(t.files[0]);
+  if(t.id==="nvNota")return lerNotaArquivo(t.files);
   if(!nn)return;
   if(t.dataset.na!=null){nn.itens[+t.dataset.na].acao=t.value;return}
   if(t.dataset.nr!=null){nn.itens[+t.dataset.nr].retirado=t.checked;return}});
