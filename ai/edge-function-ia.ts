@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return erro("Método inválido", 405);
   const auth = req.headers.get("Authorization") || ""; if (!auth) return erro("Entre na sua conta", 401);
-  const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
+  const sb = createClient(Deno.env.get("SUPABASE_URL")!, (Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY"))!, { global: { headers: { Authorization: auth } } });
   const { data: u } = await sb.auth.getUser(); if (!u?.user) return erro("Sessão expirada, entre de novo", 401);
   let body: any; try { body = await req.json() } catch { return erro("Pedido inválido") }
   const { acao, painel_id } = body || {}; if (!painel_id) return erro("Painel não informado");
