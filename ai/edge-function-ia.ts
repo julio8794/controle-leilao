@@ -177,6 +177,11 @@ async function importarLote(url: string) {
   for (const m of html.matchAll(/(?:src|data-src|href)=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)) { const a = abs(m[1]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder/i.test(a)) fotos.add(a) }
   // fotos carregadas por JSON/JS (URLs soltas, inclusive com barras escapadas)
   for (const m of html.replace(/\\\//g, "/").matchAll(/https?:\/\/[^"'\s<>()]+?\.(?:jpe?g|png|webp)(?:\?[^"'\s<>()]*)?/gi)) { const a = abs(m[0]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder|thumb_?s?mall|comitente/i.test(a)) fotos.add(a) }
+  // PDFs da página (edital primeiro) — extração por código, sem IA
+  const pdfs: { url: string; txt: string }[] = [];
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"']+?\.pdf(?:\?[^"']*)?)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi)) { const a = abs(m[1]); if (a) pdfs.push({ url: a, txt: m[2].replace(/<[^>]+>/g, " ").trim() }) }
+  for (const m of html.replace(/\\\//g, "/").matchAll(/https?:\/\/[^"'\s<>()]+?\.pdf(?:\?[^"'\s<>()]*)?/gi)) { const a = abs(m[0]); if (a && !pdfs.some(p => p.url === a)) pdfs.push({ url: a, txt: "" }) }
+  const editais = [...new Set(pdfs.sort((x, y) => (/edital/i.test(y.url + y.txt) ? 1 : 0) - (/edital/i.test(x.url + x.txt) ? 1 : 0)).map(p => p.url))].slice(0, 5);
   const texto = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|li|tr|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, 60000);
   const props: Record<string, any> = {}; ["modelo", "marca", "ano", "cor", "placa_final", "chassi", "lote", "data_leilao", "leiloeiro", "comitente", "situacao", "observacoes"].forEach(k => props[k] = campo("string")); ["km", "lance_minimo", "lance_atual"].forEach(k => props[k] = campo("number"));
   const instr = `${REGRAS_GERAIS}
@@ -189,7 +194,7 @@ TAREFA: extrair os dados do LOTE desta página de leiloeiro.
   const fonteN = norm(texto); const out: any = {};
   for (const k of Object.keys(props)) out[k] = ["km", "lance_minimo", "lance_atual"].includes(k) ? verificar(dados[k], fonteN) : { ...dados[k], verificado: dados[k]?.valor ? trechoExiste(fonteN, dados[k].trecho) : false };
   if (out.data_leilao?.valor && !/^\d{4}-\d{2}-\d{2}$/.test(out.data_leilao.valor)) out.data_leilao.verificado = false;
-  return { resultado: { ...out, fotos: [...fotos].slice(0, 12), url: final }, uso };
+  return { resultado: { ...out, fotos: [...fotos].slice(0, 12), editais, url: final }, uso };
 }
 async function analisarFotos(imagens: string[], modelo: string, ano: string, base: string[]) {
   const imgs = (imagens || []).filter(u => urlSegura(u) || /^data:image\//.test(u)).slice(0, 8); if (!imgs.length) throw new Error("Nenhuma foto válida");
@@ -239,7 +244,7 @@ Deno.serve(async (req) => {
   const { count } = await sb.from("ia_uso").select("id", { count: "exact", head: true }).eq("painel_id", painel_id).gte("criado_em", hoje.toISOString());
   if ((count || 0) >= LIMITE) return erro(`Limite diário de ${LIMITE} usos da IA atingido`, 429);
   const t0 = Date.now(); AGENTE_ATUAL = acao;
-  const chave = ["ler_edital", "importar_lote"].includes(acao) && body.url ? acao + ":" + body.url : null;
+  const chave = ["ler_edital", "importar_lote"].includes(acao) && body.url ? acao + ":v2:" + body.url : null;
   if (chave && !body.refazer) { const { data: c } = await sb.from("ia_cache").select("resultado").eq("painel_id", painel_id).eq("chave", chave).gte("criado_em", new Date(Date.now() - 30 * 864e5).toISOString()).maybeSingle(); if (c) return json({ ...c.resultado, _cache: true }) }
   try {
     let r: any;

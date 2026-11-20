@@ -1,5 +1,5 @@
-const C="leilao-v8";
-const CORE=["./","index.html","manifest.json","icon-192.png","icon-512.png","css/app.css","js/base.js","js/fotosq.js","js/config.js","js/views.js","js/precos.js","js/grupos.js","js/moto.js","js/telas.js","js/ia.js","js/dados.js","js/avaliador.js","js/boot.js","https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"];
+const C="leilao-v9";
+const CORE=["./","index.html","manifest.json","icon-192.png","icon-512.png","css/app.css","js/base.js","js/fotosq.js","js/config.js","js/views.js","js/precos.js","js/grupos.js","js/moto.js","js/telas.js","js/ia.js","js/dados.js","js/avaliar2.js","js/avaliador.js","js/boot.js","https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(C).then(c=>Promise.all(CORE.map(u=>c.add(u).catch(()=>0)))));self.skipWaiting()});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==C).map(k=>caches.delete(k)))));self.clients.claim()});
 self.addEventListener("fetch",e=>{

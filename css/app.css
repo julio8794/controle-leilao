@@ -296,3 +296,7 @@ fieldset.vist{border-color:#f5a52466;background:linear-gradient(180deg,#1f1a0e,v
 .tcmp.conf tr.cf-corrigido td{background:rgba(76,141,255,.07)}
 .ck{font-size:13px;padding:4px 0}.ck.ok{color:var(--good)}.ck.no{color:var(--acc)}.ck small{color:var(--mut)}
 fieldset .tcmp.conf{display:block;overflow-x:auto}
+
+.vinc .gal{margin-bottom:6px}.vinc-g{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.kv{display:flex;gap:8px;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed var(--line)}.kv span{color:var(--mut)}.kv b{text-align:right;font-weight:600;word-break:break-all}
+@media(max-width:560px){.vinc-g{grid-template-columns:1fr}}

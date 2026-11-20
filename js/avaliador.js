@@ -229,7 +229,7 @@ function renderAvRes(){
    <div class="chips"><button data-iadd="${k}">＋ Adicionar item</button></div></div>`}).join("")}
   ${r?[["⚠️ Riscos",r.riscos],["📄 Alertas de documentação",r.alertas_documentacao],["🔍 Confira na vistoria presencial",r.dicas_vistoria]].filter(x=>Array.isArray(x[1])&&x[1].length).map(([t,a])=>`<div class="sec-t">${t}</div><div class="card"><ul class="ul">${a.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`).join(""):""}
   <div class="note">Estimativa feita por IA a partir das fotos e da descrição: serve para comparar lotes e definir seu limite de lance, não substitui vistoria presencial. FIPE estimada pela IA pode estar desatualizada: confirme no site oficial.</div>
-  <label style="margin-top:14px">Grupo / edital${grupoSelect({grupoId:av.grupoId||fgrupoId},'id="avGr"')}</label><div class="toolbar" style="margin-top:10px"><button class="btn" id="avSave">💾 ${av.vid&&vehicles.find(v=>v.id===av.vid)?"Atualizar no controle":"Salvar no controle de veículos"}</button><button class="btn ghost" id="avNew">＋ Nova avaliação</button></div>`;
+  <div class="toolbar" style="margin-top:14px"><button class="btn" id="avSave">💾 ${av.vid&&vehicles.find(v=>v.id===av.vid)?"Atualizar no controle":"Salvar no controle de veículos"}</button><button class="btn ghost" id="avNew">＋ Nova avaliação</button></div>`;
   avSum();avSubs();
 }
 function importAv(txt){
