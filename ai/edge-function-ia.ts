@@ -139,7 +139,7 @@ async function importarLote(url: string) {
   for (const m of html.matchAll(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)/gi)) { const a = abs(m[1]); if (a) fotos.add(a) }
   for (const m of html.matchAll(/(?:src|data-src|href)=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)) { const a = abs(m[1]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder/i.test(a)) fotos.add(a) }
   // fotos carregadas por JSON/JS (URLs soltas, inclusive com barras escapadas)
-  for (const m of html.replace(/\\\//g, "/").matchAll(/https?:\/\/[^"'\s<>()]+?\.(?:jpe?g|png|webp)(?:\?[^"'\s<>()]*)?/gi)) { const a = abs(m[0]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder|thumb_?s?mall/i.test(a)) fotos.add(a) }
+  for (const m of html.replace(/\\\//g, "/").matchAll(/https?:\/\/[^"'\s<>()]+?\.(?:jpe?g|png|webp)(?:\?[^"'\s<>()]*)?/gi)) { const a = abs(m[0]); if (a && !/logo|icon|sprite|banner|avatar|whats|placeholder|thumb_?s?mall|comitente/i.test(a)) fotos.add(a) }
   const texto = html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<noscript[\s\S]*?<\/noscript>/gi, " ").replace(/<br\s*\/?>|<\/(p|div|li|tr|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/[ \t]+/g, " ").replace(/\n\s*\n+/g, "\n").trim().slice(0, 60000);
   const props: Record<string, any> = {}; ["modelo", "marca", "ano", "cor", "placa_final", "chassi", "lote", "data_leilao", "leiloeiro", "comitente", "situacao", "observacoes"].forEach(k => props[k] = campo("string")); ["km", "lance_minimo", "lance_atual"].forEach(k => props[k] = campo("number"));
   const instr = `${REGRAS_GERAIS}
