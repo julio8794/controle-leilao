@@ -54,7 +54,7 @@ function filtrados(){const f=filtro.toLowerCase();
 function barraFiltro(){return `${pacoteBanner()}<div class="toolbar"><input id="busca" placeholder="Buscar modelo, lote, responsável…" value="${esc(filtro)}">
   <select id="fgr"><option value="">Todos os editais</option>${grupos.map(g=>`<option value="${g.id}" ${fgrupoId===g.id?"selected":""}>${esc(g.nome)}</option>`).join("")}</select>
   <select id="fst"><option value="">Todos os status</option>${Object.entries(STATUS).map(([k,n])=>`<option value="${k}" ${fstatus===k?"selected":""}>${n}</option>`).join("")}</select>
-  ${podeGerir()?`<div class="toolbar" style="margin:0;width:100%"><button class="btn ghost sm" id="impLink">🔗 Lote por link</button><button class="btn ghost sm" id="impPl">⬆ Planilha</button><button class="btn ghost sm fin" id="expPl">⬇ Exportar</button></div>`:""}<div class="seg2"><button data-vm="lista" class="${vmodo==="lista"?"on":""}">📋 Lista</button><button data-vm="comparar" class="${vmodo==="comparar"?"on":""} fin">🏁 Comparar</button></div></div>`}
+  ${podeGerir()?`<div class="toolbar" style="margin:0;width:100%"><button class="btn ghost sm" id="impLink">🔗 Lote por link</button><button class="btn ghost sm" id="impPl">⬆ Planilha</button><button class="btn ghost sm" id="impAudio">🎤 Áudio de vistoria</button><button class="btn ghost sm fin" id="expPl">⬇ Exportar</button></div>`:""}<div class="seg2"><button data-vm="lista" class="${vmodo==="lista"?"on":""}">📋 Lista</button><button data-vm="comparar" class="${vmodo==="comparar"?"on":""} fin">🏁 Comparar</button></div></div>`}
 function lista(){
   if(!vivos().length)return barraFiltro()+emptyHTML();
   const arr=filtrados();

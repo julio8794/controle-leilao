@@ -62,6 +62,7 @@ function tabVistoria(v){
    <div class="vf" id="vfBox"></div>
    <label class="btn ghost sm vf-add"><input type="file" id="vfIn" accept="image/*" multiple hidden>📷 Tirar / adicionar fotos</label>
    <div class="mini" id="vfSt"></div>
+   ${(v.audiosVist||[]).length?`<div class="sec-t" style="margin:16px 0 8px">🎤 Áudios da vistoria</div>${v.audiosVist.map(a=>`<details class="evid"><summary>${esc(a.arquivo)}</summary>${esc(a.texto)}</details>`).join("")}`:""}
   </fieldset>`;
 }
 function orcRow(o,v){return `<div class="drow orc" data-oid="${o.id}"><input data-ok="desc" list="dlPecas" value="${esc(o.desc)}" placeholder="Peça / serviço"><input data-ok="valor" inputmode="decimal" placeholder="R$" value="${esc(fmtIn(o.valor))}"><button data-orcdel="${o.id}" aria-label="Remover">✕</button>

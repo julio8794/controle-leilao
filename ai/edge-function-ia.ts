@@ -64,6 +64,7 @@ const AGENTES: Record<string, { prompt: string; modelo: string }> = {
   importar_lote: { prompt: Deno.env.get("PROMPT_IMPORTAR_LOTE") || "pmpt_6aff9564f2f4819087db1d058af07710078f2f34ff066db9", modelo: "gpt-6-luna" },
   analisar_fotos: { prompt: Deno.env.get("PROMPT_ANALISAR_FOTOS") || "pmpt_6aff95809a1c8194b72e09a85b69480003274924a703d52b", modelo: "gpt-6.2-sol" },
   escolher_fipe: { prompt: Deno.env.get("PROMPT_ESCOLHER_FIPE") || "", modelo: "gpt-6-luna" },
+  extrair_vistoria: { prompt: Deno.env.get("PROMPT_EXTRAIR_VISTORIA") || "", modelo: "gpt-6.2-sol" },
   mapear_planilha: { prompt: Deno.env.get("PROMPT_MAPEAR_PLANILHA") || "pmpt_6aff959a109c819392d43d4ef4c665bb025bc8d8b650f83b", modelo: "gpt-6-luna" },
 };
 let AGENTE_ATUAL = "";
@@ -143,6 +144,60 @@ async function escolherFipe(veiculo: string, ano: string, candidatos: string[]) 
 Escolha o índice (0 a ${c.length - 1}) do candidato que é a MESMA versão (mesma cilindrada, mesma linha/versão, ex.: FAN, TITAN, START, CARGO, ES/ESD/EX). Use somente a lista. Se nenhum for claramente a mesma versão, ou se houver empate real, devolva indice null. motivo: 1 frase.`;
   const { dados, uso } = await openai(instr, [{ type: "input_text", text: JSON.stringify({ veiculo, ano, candidatos: c.map((n, i) => `${i}: ${n}`) }) }], "escolha_fipe", schema);
   const i = dados.indice; return { resultado: { indice: Number.isInteger(i) && i >= 0 && i < c.length ? i : null, motivo: dados.motivo }, uso };
+}
+// ---------- áudio de vistoria ----------
+const PRECO_TRANSC: Record<string, number> = { "gpt-4o-transcribe": 0.006, "gpt-transcribe": 0.0045, "gpt-4o-mini-transcribe": 0.003, "whisper-1": 0.006 };
+async function transcrever(b64: string, nome: string, mime: string, segundos: number, contexto: string) {
+  const key = Deno.env.get("OPENAI_API_KEY") || Object.values(Deno.env.toObject()).find(v => /^sk-[A-Za-z0-9_-]{20,}/.test(String(v).trim()))?.trim();
+  if (!key) throw new Error("Chave da OpenAI não configurada");
+  const bytes = Uint8Array.from(atob(b64 || ""), c => c.charCodeAt(0)); if (!bytes.length) throw new Error("Áudio vazio"); if (bytes.length > 20e6) throw new Error("Áudio maior que 20 MB");
+  const modelo = Deno.env.get("TRANSCRIBE_MODEL") || "gpt-4o-transcribe";
+  const fd = new FormData(); fd.append("file", new Blob([bytes], { type: mime || "audio/ogg" }), (nome || "audio.ogg").replace(/[^\w.\-]/g, "_"));
+  fd.append("model", modelo); fd.append("language", "pt"); fd.append("response_format", "json");
+  if (contexto) fd.append("prompt", String(contexto).slice(0, 900));
+  const r = await fetch("https://api.openai.com/v1/audio/transcriptions", { method: "POST", headers: { Authorization: `Bearer ${key}` }, body: fd, signal: AbortSignal.timeout(120000) });
+  const d = await r.json(); if (!r.ok) throw new Error("OpenAI (transcrição): " + (d?.error?.message || r.status));
+  const min = Math.max(0, Number(segundos) || 0) / 60;
+  return { resultado: { texto: String(d.text || "").trim() }, uso: { entrada: 0, cache: 0, saida: 0, modelo, agente: "transcricao", custo_fixo: min * (PRECO_TRANSC[modelo] ?? 0.006) } };
+}
+const CHECK_KEYS = ["motor", "chassi", "nmotor", "painel", "eletrica", "pneus", "freios", "garfo", "relacao", "tanque", "pecas", "placa"];
+async function extrairVistoria(texto: string, motos: any[]) {
+  const ms = (motos || []).slice(0, 80).map((m: any) => ({ id: String(m.id), lote: m.lote || "", modelo: m.modelo || "", ano: m.ano || "", cor: m.cor || "", placa: m.placa || "" }));
+  const ids = ms.map(m => m.id);
+  const tre = { type: "string" };
+  const schema = obj({
+    motos: { type: "array", items: obj({
+      moto_id: { type: ["string", "null"], enum: [...ids, null] }, identificacao_trecho: N(["string"]),
+      checks: { type: "array", items: obj({ item: { type: "string", enum: CHECK_KEYS }, status: { type: "string", enum: ["ok", "at", "pb"] }, trecho: tre }) },
+      pecas: { type: "array", items: obj({ desc: { type: "string" }, categoria: { type: "string", enum: ["estetica", "mecanica", "documentacao", "outros"] }, item: { type: ["string", "null"], enum: [...CHECK_KEYS, null] }, trecho: tre }) },
+      km: obj({ valor: N(["number"]), trecho: N(["string"]) }), nota: obj({ valor: N(["number"]), trecho: N(["string"]) }), limite: obj({ valor: N(["number"]), trecho: N(["string"]) }),
+      observacoes: { type: "array", items: obj({ texto: { type: "string" }, trecho: tre }) },
+      resumo: { type: "string" } }) },
+    nao_identificado: { type: "array", items: { type: "string" } }
+  });
+  const instr = `Você recebe a TRANSCRIÇÃO de um áudio em que um comprador de leilão descreve, no pátio, o estado de motos que está vendo, e a LISTA de motos cadastradas (id, lote, modelo, ano, cor, placa).
+TAREFA: para cada moto mencionada, extrair a vistoria.
+REGRAS INVIOLÁVEIS:
+1. Identifique a moto pelo que a pessoa disse (número do lote, modelo, cor, placa, ano). moto_id = id da LISTA. Se não der para saber com segurança qual é, moto_id null e explique em nao_identificado. Nunca chute.
+2. identificacao_trecho: trecho LITERAL da transcrição que identifica a moto.
+3. checks: só os itens que a pessoa avaliou. Itens: motor (liga/barulho), chassi (chassi confere/legível), nmotor (número do motor confere), painel (painel/velocímetro/km), eletrica (luzes/elétrica/bateria), pneus, freios, garfo (bengala/suspensão/alinhamento), relacao (corrente/relação/coroa/pinhão), tanque (tanque/pintura/ferrugem/amassado), pecas (peças faltando: retrovisor, carenagem, banco, para-lama etc.), placa. status: ok = bom/normal/funcionando; at = desgaste/precisa ajustar/um pouco; pb = quebrado/faltando/não funciona/muito ruim.
+4. pecas: cada peça ou serviço que a pessoa disse que precisa (trocar, faltando, consertar, pintar). desc curta em português, sem preço.
+5. km, nota (0 a 10), limite (lance máximo em reais): só se a pessoa falou. Senão valor null e trecho null.
+6. observacoes: outras informações úteis faladas (ex.: "cor diferente do edital", "sem chave", "pneu murcho"), com trecho.
+7. TODO trecho = cópia LITERAL e contígua da transcrição (máx. 200 caracteres). Não reescreva.
+8. resumo: 1 frase só com o que foi dito. Não acrescente nada que não está na transcrição.`;
+  const { dados, uso } = await openai(instr, [{ type: "input_text", text: JSON.stringify({ LISTA: ms }) + "\n\nTRANSCRIÇÃO:\n" + texto }], "vistoria_audio", schema);
+  const fonteN = norm(texto); const ok = (t: any) => trechoExiste(fonteN, t);
+  const motosOut = (dados.motos || []).map((m: any) => ({
+    ...m, moto_id: ids.includes(m.moto_id) ? m.moto_id : null, identificacao_ok: ok(m.identificacao_trecho),
+    checks: (m.checks || []).filter((c: any) => ok(c.trecho)), pecas: (m.pecas || []).filter((p: any) => ok(p.trecho)),
+    km: m.km?.valor != null && ok(m.km.trecho) && numeroNoTrecho(m.km.valor, m.km.trecho) ? m.km : { valor: null, trecho: null },
+    nota: m.nota?.valor != null && ok(m.nota.trecho) ? m.nota : { valor: null, trecho: null },
+    limite: m.limite?.valor != null && ok(m.limite.trecho) ? m.limite : { valor: null, trecho: null },
+    observacoes: (m.observacoes || []).filter((o: any) => ok(o.trecho)),
+    descartados: (m.checks || []).filter((c: any) => !ok(c.trecho)).length + (m.pecas || []).filter((p: any) => !ok(p.trecho)).length,
+  }));
+  return { resultado: { motos: motosOut, nao_identificado: dados.nao_identificado || [] }, uso };
 }
 // ---------- skills ----------
 async function lerEdital(url: string) {
@@ -309,11 +364,13 @@ Deno.serve(async (req) => {
     if (acao === "lotes_edital") { const ps = await textoPdf(body.url); const x = lerAnexoLotes(ps); await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: "sem IA (Anexo I)", custo_usd: 0, origem: "codigo", ref: String(body.url).slice(0, 300), ms: Date.now() - t0, ok: true }); return json({ paginas: ps.length, ...x, _uso: { custo_usd: 0, agente: "codigo" } }) }
     if (acao === "ler_edital") r = await lerEdital(body.url);
     else if (acao === "escolher_fipe") r = await escolherFipe(body.veiculo, body.ano, body.candidatos);
+    else if (acao === "transcrever") r = await transcrever(body.audio, body.nome, body.mime, body.segundos, body.contexto);
+    else if (acao === "extrair_vistoria") r = await extrairVistoria(body.texto, body.motos);
     else if (acao === "importar_lote") r = await importarLote(body.url);
     else if (acao === "analisar_fotos") r = await analisarFotos(body.imagens, body.modelo, body.ano, body.base);
     else if (acao === "mapear_planilha") r = await mapearPlanilha(body.cabecalhos, body.amostra);
     else return erro("Ação desconhecida");
-    const custo = r.uso.agente === "codigo" ? 0 : custoUSD(r.uso.modelo, r.uso.entrada, r.uso.cache || 0, r.uso.saida);
+    const custo = r.uso.agente === "codigo" ? 0 : r.uso.custo_fixo != null ? r.uso.custo_fixo : custoUSD(r.uso.modelo, r.uso.entrada, r.uso.cache || 0, r.uso.saida);
     r.uso.custo_usd = custo;
     await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: r.uso.modelo, tokens_in: r.uso.entrada, tokens_cache: r.uso.cache || 0, tokens_out: r.uso.saida, custo_usd: custo, origem: r.uso.agente === "codigo" ? "codigo" : "ia", ref: String(body.ref || body.url || "").slice(0, 300) || null, ms: Date.now() - t0, ok: true });
     if (chave) await sb.from("ia_cache").upsert({ painel_id, chave, resultado: r.resultado, criado_em: new Date().toISOString() });

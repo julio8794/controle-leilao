@@ -312,3 +312,6 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 .fwrap{position:relative;flex:none;display:inline-flex}.fwrap .fchip{padding-right:30px}
 .fdel{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;border:0;background:var(--panel2);color:var(--mut);font-size:11px;line-height:22px;padding:0}
 .fdel:hover{background:var(--bad);color:#fff}
+
+.aud{border-bottom:1px solid var(--line);padding:8px 0;font-size:13.5px}.aud small{color:var(--mut)}.aud.erro small{color:var(--bad)}
+.aurev{border:1px solid var(--line);border-radius:12px;padding:10px;margin:10px 0;background:var(--panel)}.aurev select{margin:6px 0}
