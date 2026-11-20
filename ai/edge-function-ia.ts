@@ -270,7 +270,7 @@ function loteEstruturado(html: string, url: string) {
     campos: {
       modelo: c(mt ? mt[2] : (L.carBrand?.name ? null : null)), marca: c(L.carBrand?.name), ano: c(L.year || (mt && mt[3])), cor: c(L.color), placa_final: c(L.plate), chassi: c(L.chassi),
       renavam: c(L.renavam), motor: c(L.engine), combustivel: c(L.gas), km: c(null), lote: c(L.numberCode != null ? String(L.numberCode).padStart(3, "0") : null),
-      lance_minimo: c(n(L.minimunSale) ?? n(L.avaliation) ?? n(L.initialBid)), lance_atual: c(lances.length ? Math.max(...lances) : null),
+      lance_minimo: c(n(L.minimunSale) ?? n(L.avaliation) ?? n(L.initialBid)), lance_atual: c(lances.length ? Math.max(...lances) : null), incremento: c(n(L.increase)), lances_qtd: c((L.bids || []).length || null),
       data_leilao: c(datas[datas.length - 1] || null), leiloeiro: c(A.auctioneer?.name), comitente: c(A.comitent?.name || A.committent?.name || A.seller?.name), cidade: c(L.city), uf: c(L.state),
       situacao: c(mt ? mt[1] : null), observacoes: c(limpa(L.observation) || limpa(L.description)),
     }

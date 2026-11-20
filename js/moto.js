@@ -110,6 +110,10 @@ function tabLeilao(v){
     <div class="f2" style="margin-top:8px">${inp("lote","Lote")}${inp("dataLeilao","Data do leilão",{type:"date"})}${inp("leiloeiro","Leiloeiro")}${inp("lanceMin","Lance mínimo (R$)",{num:1})}</div>
     <div style="margin-top:8px">${inp("link","Link do lote",{ph:"https://…"})}</div>
     ${/^https?:\/\//.test(v.link||"")?`<a class="btn ghost sm" style="text-decoration:none;margin-top:8px" href="${esc(v.link)}" target="_blank" rel="noopener">🔗 Abrir lote</a>`:""}</fieldset>
+  ${(()=>{const la=laInfo(v);return la?`<fieldset><legend>📈 Lance atual no site</legend><div class="calc big"><span>Maior lance</span><b>${brl(la.valor)}</b></div>
+    <div class="mini">${haQuanto(la.em)}${la.qtd?` · ${la.qtd} lances`:""}${la.inc?` · incremento ${brl(la.inc)}`:""}</div><div style="margin-top:6px">${alertaLance(v)}</div>
+    ${(v.leilao.historico||[]).length>1?`<div class="mini" style="margin-top:6px">Evolução: ${v.leilao.historico.slice(-8).map(h=>brl(h.valor).replace(",00","")).join(" → ")}</div>`:""}
+    <div class="toolbar" style="margin:8px 0 0"><button class="btn ghost sm" id="laUm">🔄 Atualizar</button></div></fieldset>`:(/^https?:/.test(v.link||"")?`<div class="toolbar" style="margin:0 0 10px"><button class="btn ghost sm" id="laUm">🔄 Buscar lance atual no site</button></div>`:"")})()}
   <fieldset><legend>🎯 Limite de lance</legend>
     <div class="calc big"><span>Lance máximo calculado</span><b id="lLmax">—</b></div>
     <div class="mini">Venda alvo ${brl(c.V)} − margem ${c.cu.margem}% − custas do edital − orçamento ${brl(c.orcTot+c.docsPrev)} (+${c.cu.conting}% reserva), dividido por (1 + comissão + taxa adm.).</div>
