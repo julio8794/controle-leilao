@@ -18,7 +18,7 @@ chamarIA=async function(acao,dados){
 async function gastoMes(){const ini=new Date();ini.setDate(1);ini.setHours(0,0,0,0);const {data}=await sb.from("ia_uso").select("custo_usd").eq("painel_id",painelId).gte("criado_em",ini.toISOString()).limit(5000);return (data||[]).reduce((a,x)=>a+num(x.custo_usd),0)}
 async function custosHTML(){
   const desde=new Date(Date.now()-90*864e5).toISOString();
-  const {data,error}=await sb.from("ia_uso").select("acao,modelo,tokens_in,tokens_cache,tokens_out,custo_usd,custo_brl,origem,ref,ok,erro,ms,criado_em").eq("painel_id",painelId).gte("criado_em",desde).order("criado_em",{ascending:false}).limit(5000);
+  const {data,error}=await sb.from("ia_uso").select("*").eq("painel_id",painelId).gte("criado_em",desde).order("criado_em",{ascending:false}).limit(5000);
   if(error)return `<div class="mini neg">Não consegui ler os custos: ${esc(error.message)}</div>`;
   const k=await usdBrl();const R=v=>brl((v||0)*k.v);const rows=data||[];
   rows.forEach(x=>{x.custo_usd=num(x.custo_usd)+num(x.custo_brl)/k.v;if(x.origem==="consulta")x.origem="ia"});

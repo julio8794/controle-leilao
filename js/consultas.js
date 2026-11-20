@@ -32,5 +32,5 @@ document.addEventListener("click",e=>{const b=e.target.closest("#cvIr,#cvOk,#cvC
     chamarIA("consulta_veicular",{produtos:prods.map(x=>x[0]),placa:v.placa,chassi:v.chassi,senha,ref:v.link||v.placa||v.id}).then(r=>{
       v.consultasExt=(v.consultasExt||[]).concat((r.consultas||[]).map(c=>({...c,em:r.em}))).slice(-40);persist(v);cvSel={};
       const ok=(r.consultas||[]).filter(c=>c.ok).length;toast(`${ok} de ${(r.consultas||[]).length} consulta(s) feita(s) · ${brl(r.custo_brl||0)}`);keepScroll(renderETab)})
-    .catch(err=>{const st=$("#cvSt");if(st)st.innerHTML=`<div class="ia-box"><b class="neg">${esc(err.message)}</b></div>`});}
+    .catch(err=>{const m=/desconhecida/i.test(err.message)?"A consulta veicular ainda não foi ativada no servidor.":err.message;const st=$("#cvSt");if(st)st.innerHTML=`<div class="ia-box"><b class="neg">${esc(m)}</b></div>`});}
 });
