@@ -106,7 +106,7 @@ async function flush(){
   flushing=true;
   try{for(const k of ks){const x=pend[k];let r;
     if(x.lix!==undefined)r=await sb.rpc("lixeira",{p_painel:x.p,p_id:x.id,p_excluir:x.lix});
-    else{r=await sb.rpc("salvar_campos",{p_painel:x.p,p_id:x.id,p_set:x.set});if(!r.error&&x.p===painelId)srv[x.id]=r.data}
+    else{r=await sb.rpc("salvar_campos",{p_painel:x.p,p_id:x.id,p_set:x.set});if(!r.error&&x.p===painelId)srv[x.id]=JSON.parse(JSON.stringify(r.data))}
     if(r.error){if(/permiss|vistoriador|sem permiss/i.test(r.error.message)){delete pend[k];savePend();toast("⚠ "+r.error.message);continue}throw r.error}
     delete pend[k];savePend()}
     setSt(okMsg());
@@ -158,7 +158,7 @@ async function trocarPainel(id){
   rtCh=sb.channel("veic-"+id).on("postgres_changes",{event:"*",schema:"public",table:"veiculos",filter:"painel_id=eq."+id},pl=>{
     if(painelId!==id)return;
     if(pl.eventType==="DELETE"){const vid=pl.old&&pl.old.id;if(!vid)return;delete srv[vid];vehicles=vehicles.filter(v=>v.id!==vid);lixo=lixo.filter(v=>v.id!==vid)}
-    else{const v=pl.new&&pl.new.dados;if(!v)return;srv[v.id]=v;
+    else{const v=pl.new&&pl.new.dados;if(!v)return;srv[v.id]=JSON.parse(JSON.stringify(v));
       if(editing&&editing.id===v.id){if(JSON.stringify(editing.fotosVist||[])!==JSON.stringify(v.fotosVist||[])){editing.fotosVist=v.fotosVist||[];renderVF&&renderVF()}return}
       if(dirty.has(v.id))return;
       const rows=[...vehicles,...lixo].filter(x=>x.id!==v.id).map(x=>srv[x.id]||x);rows.push(v);montarLista(rows)}
@@ -173,7 +173,9 @@ async function trocarPainel(id){
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&me&&painelId){loadAll();flush()}});
 function montarLista(rows){
   const pp=Object.values(pend).filter(x=>x.p===painelId);
-  srv={};rows.forEach(r=>{if(r)srv[r.id]=r});
+  // cópia profunda: a referência do servidor NUNCA pode ser o mesmo objeto da tela (senão nenhuma alteração gera diferença para salvar)
+  const cp=o=>JSON.parse(JSON.stringify(o));
+  srv={};rows.forEach(r=>{if(r)srv[r.id]=cp(r)});rows=rows.map(r=>r&&cp(r));
   const lixP=new Map(pp.filter(x=>x.lix!==undefined).map(x=>[x.id,x.lix]));
   const all=rows.filter(Boolean).map(r=>{const x=pp.find(x=>x.id===r.id&&x.set);return x?applySet(r,x.set):r});
   pp.forEach(x=>{if(x.set&&!all.find(m=>m.id===x.id))all.push(applySet({id:x.id},x.set))});

@@ -26,7 +26,7 @@ async function processFQ(){
       const {data,error}=await sb.rpc("adicionar_foto",{p_painel:r.p,p_id:r.vid,p_foto:foto});
       if(error)continue;
       await FQ.del(r.id);if(fqUrls[r.id]){URL.revokeObjectURL(fqUrls[r.id]);delete fqUrls[r.id]}
-      if(r.p===painelId){srv[r.vid]=data;const v=vehicles.find(x=>x.id===r.vid);if(v)v.fotosVist=data.fotosVist||[];if(editing&&editing.id===r.vid){editing.fotosVist=data.fotosVist||[];renderVF()}}
+      if(r.p===painelId){srv[r.vid]=JSON.parse(JSON.stringify(data));const v=vehicles.find(x=>x.id===r.vid);if(v)v.fotosVist=data.fotosVist||[];if(editing&&editing.id===r.vid){editing.fotosVist=data.fotosVist||[];renderVF()}}
     }
     const rest=(await FQ.all()).length;const st=$("#vfSt");if(st&&!rest)st.textContent="✓ Fotos enviadas";
   }catch(e){}finally{fqBusy=false}
@@ -34,6 +34,6 @@ async function processFQ(){
 async function removerFoto(v,path){
   const {data,error}=await sb.rpc("remover_foto",{p_painel:painelId,p_id:v.id,p_path:path});
   if(error)return toast("Erro: "+error.message);sb.storage.from("vistorias").remove([path]);
-  srv[v.id]=data;v.fotosVist=data.fotosVist||[];if(editing===v)renderVF();
+  srv[v.id]=JSON.parse(JSON.stringify(data));v.fotosVist=data.fotosVist||[];if(editing===v)renderVF();
 }
 setInterval(processFQ,30000);window.addEventListener("online",processFQ);
