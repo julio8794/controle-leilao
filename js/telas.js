@@ -55,6 +55,15 @@ function barraFiltro(){return `${pacoteBanner()}<div class="toolbar"><input id="
   <select id="fgr"><option value="">Todos os editais</option>${grupos.map(g=>`<option value="${g.id}" ${fgrupoId===g.id?"selected":""}>${esc(g.nome)}</option>`).join("")}</select>
   <select id="fst"><option value="">Todos os status</option>${Object.entries(STATUS).map(([k,n])=>`<option value="${k}" ${fstatus===k?"selected":""}>${n}</option>`).join("")}</select>
   ${podeGerir()?`<div class="toolbar" style="margin:0;width:100%"><button class="btn ghost sm" id="impLink">🔗 Lote por link</button><button class="btn ghost sm" id="impPl">⬆ Planilha</button><button class="btn ghost sm" id="impAudio">🎤 Áudio de vistoria</button><button class="btn ghost sm fin" id="expPl">⬇ Exportar</button></div>`:""}<div class="seg2"><button data-vm="lista" class="${vmodo==="lista"?"on":""}">📋 Lista</button><button data-vm="comparar" class="${vmodo==="comparar"?"on":""} fin">🏁 Comparar</button></div></div>`}
+// Lucro em R$ e última atualização em todo card da lista.
+// Em avaliação estima o lucro se arrematar pelo lance atual do leilão (ou o lance mínimo).
+function lucroLinha(v,c,s){
+  const la=laInfo(v);let k=c,base=c.vendido?"venda realizada":"pela venda alvo "+(c.venda?brl(c.venda):"");
+  if(s==="avaliacao"){const lance=la?la.valor:num(v.lance)||num(v.lanceMin);if(lance){k=calc({...v,lance:String(lance)});base=(la?"se arrematar no lance atual":"no lance mínimo")+(k.venda?" · venda "+brl(k.venda):"")}else k=null}
+  const ok=k&&isFinite(k.lucro);
+  const ts=[la&&la.em,v.atualizadoEm&&new Date(v.atualizadoEm).toISOString(),v.criado&&new Date(v.criado).toISOString()].filter(Boolean).sort().pop();
+  return `<div class="lucro-row fin ${ok?(k.lucro>=0?"pos":"neg"):""}"><div><span>${c.vendido?"Lucro real":"Lucro estimado"}</span><b>${ok?(k.lucro>=0?"+":"")+brl(k.lucro):"—"}</b><small>${ok?base+(isFinite(k.roi)?" · ROI "+pct(k.roi):""):"falta venda alvo ou lance"}</small></div><div class="upd"><span>Atualizado</span><b>${ts?haQuanto(ts):"—"}</b>${la&&la.em&&la.em!==ts?`<small>lance ${haQuanto(la.em)}</small>`:""}</div></div>`;
+}
 function lista(){
   if(!vivos().length)return barraFiltro()+emptyHTML();
   const arr=filtrados();
@@ -64,7 +73,8 @@ function lista(){
       <div class="vtop"><div><h3>${esc(v.modelo||"Sem nome")} ${v.ano?`<span style="color:var(--mut);font-weight:500">${esc(v.ano)}</span>`:""}</h3><div class="sub">${[!v.fotosRef&&g?g.nome:"",!v.fotosRef&&v.lote?"Lote "+v.lote:"",v.cor,vs.resp?"👤 "+vs.resp:""].filter(Boolean).map(esc).join(" · ")||"—"}</div></div><span class="chip st-${s}">${STATUS[s]}</span></div>
       <div class="vist-row"><div class="vbar2"><i style="width:${vp.done/vp.tot*100}%"></i></div><span>Vistoria ${vp.done}/${vp.tot}${vp.pb?` · <b class="neg">${vp.pb} ✕</b>`:""}${(v.fotosVist||[]).length?` · 📷 ${v.fotosVist.length}`:""}${nt!=null?` · <b>${nt.toLocaleString("pt-BR")}/10</b>`:""}${(()=>{const r=resumoConf(v);return r?(r.div?` · <b class="neg">⚠ ${r.div} a conferir</b>`:` · <span class="pos">🧩 conferido</span>`):""})()}</span></div>
       <div class="vnums fin">${s==="avaliacao"?`<div><span>${laInfo(v)?"Lance atual":"Lance mínimo"}</span><b>${laInfo(v)?brl(laInfo(v).valor):v.lanceMin?brl(num(v.lanceMin)):"—"}</b>${laInfo(v)?`<small>${haQuanto(laInfo(v).em)}</small>`:""}</div><div><span>Meu limite</span><b>${num(vs.limite)?brl(num(vs.limite)):"—"}</b></div><div><span>Lance máx. calc.</span><b>${c.lmax?brl(c.lmax):"—"}</b></div>`
-        :`<div><span>Custo previsto</span><b>${brl(c.custo)}</b></div><div><span>${c.vendido?"Vendido":"Venda alvo"}</span><b>${c.venda?brl(c.venda):"—"}</b></div><div><span>Lucro · ROI</span><b class="${c.lucro>=0?"pos":"neg"}">${isFinite(c.roi)?pct(c.roi):"—"}</b></div>`}</div>
+        :`<div><span>Custo previsto</span><b>${brl(c.custo)}</b></div><div><span>${c.vendido?"Vendido":"Venda alvo"}</span><b>${c.venda?brl(c.venda):"—"}</b></div><div><span>ROI</span><b class="${c.lucro>=0?"pos":"neg"}">${isFinite(c.roi)?pct(c.roi):"—"}</b></div>`}</div>
+      ${lucroLinha(v,c,s)}
     </div>`}).join("")||`<div class="empty">Nada encontrado.</div>`}</div>`;
 }
 function comparar(){

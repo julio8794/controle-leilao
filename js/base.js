@@ -92,6 +92,7 @@ function applySet(o,set){const r=JSON.parse(JSON.stringify(o||{}));Object.entrie
 const okMsg=()=>canWrite?"✓ Sincronizado — igual em todos os celulares":"👁 Somente visualização";
 function persist(v){
   if(!canWrite){setSt("👁 Somente visualização — peça ao dono para te dar acesso de editor");return}
+  v.atualizadoEm=Date.now();
   const p=painelId;dirty.add(v.id);clearTimeout(saveTimers[v.id]);setSt("Salvando…");
   saveTimers[v.id]=setTimeout(async()=>{lsSave();
     const ch=diffPaths(srv[v.id]||{},JSON.parse(JSON.stringify(v)));

@@ -319,3 +319,12 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 
 .cvres{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}.cvres.alerta{border-color:var(--bad);background:rgba(248,81,73,.05)}.cvres.erro{opacity:.7}
 .cvres summary{cursor:pointer;font-size:13.5px}
+.lucro-row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:12px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--mut) 9%,transparent);border-left:3px solid var(--mut)}
+.lucro-row.pos{background:color-mix(in srgb,#16a34a 11%,transparent);border-left-color:#16a34a}
+.lucro-row.neg{background:color-mix(in srgb,#dc2626 11%,transparent);border-left-color:#dc2626}
+.lucro-row span{display:block;font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.lucro-row b{font-family:"Space Grotesk";font-size:20px;line-height:1.2}
+.lucro-row.pos>div:first-child b{color:#16a34a}.lucro-row.neg>div:first-child b{color:#dc2626}
+.lucro-row small{display:block;font-size:11px;color:var(--mut)}
+.lucro-row .upd{text-align:right}.lucro-row .upd b{font-size:13px;color:inherit}
+.lucro-row .upd b{color:inherit!important;opacity:.9}.lucro-row .upd{color:var(--mut)}
