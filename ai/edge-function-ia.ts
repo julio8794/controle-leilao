@@ -87,6 +87,11 @@ REGRAS INVIOLÁVEIS:
 5. Não arredonde nem converta valores, exceto as conversões pedidas explicitamente no campo.
 6. Responda apenas no formato JSON exigido.`;
 
+// ---------- texto do PDF (sem IA) ----------
+async function textoPdf(url: string) {
+  const { bytes } = await baixar(url, 20e6); const pdf = await getDocumentProxy(bytes);
+  const { text } = await extractText(pdf, { mergePages: false }); return (text as string[]);
+}
 // ---------- skills ----------
 async function lerEdital(url: string) {
   const { bytes } = await baixar(url, 20e6);
@@ -206,6 +211,7 @@ Deno.serve(async (req) => {
   if (chave && !body.refazer) { const { data: c } = await sb.from("ia_cache").select("resultado").eq("painel_id", painel_id).eq("chave", chave).gte("criado_em", new Date(Date.now() - 30 * 864e5).toISOString()).maybeSingle(); if (c) return json({ ...c.resultado, _cache: true }) }
   try {
     let r: any;
+    if (acao === "paginas_edital") { const ps = await textoPdf(body.url); const re = new RegExp(body.filtro || "chassi|renavam|placa", "i"); return json({ total: ps.length, paginas: ps.map((t, i) => ({ n: i + 1, t })).filter(p => re.test(p.t)).map(p => ({ ...p, t: p.t.slice(0, body.max || 6000) })) }) }
     if (acao === "ler_edital") r = await lerEdital(body.url);
     else if (acao === "importar_lote") r = await importarLote(body.url);
     else if (acao === "analisar_fotos") r = await analisarFotos(body.imagens, body.modelo, body.ano, body.base);
