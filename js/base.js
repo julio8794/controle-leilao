@@ -26,21 +26,38 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const uid=()=>"v"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 function toast(m){const t=$("#toast");t.textContent=m;t.style.display="block";clearTimeout(t._t);t._t=setTimeout(()=>t.style.display="none",2200)}
 
+let grupos=[],precos=[],membros=[];
+const grupoDe=v=>grupos.find(g=>g.id===v.grupoId)||null;
+const temV=x=>x!==undefined&&x!==null&&x!=="";
+function custas(v){const c=(grupoDe(v)||{}).custas||{};
+  return {comPct:temV(v.comissaoPct)?num(v.comissaoPct):num(c.comissaoPct),admPct:temV(v.taxaAdmPct)?num(v.taxaAdmPct):num(c.taxaAdmPct),
+    fixas:(c.taxasFixas||[]).reduce((a,t)=>a+num(t.valor),0),taxasFixas:c.taxasFixas||[],docs:c.docs||[],
+    conting:temV(v.conting)?num(v.conting):(temV(c.contingPct)?num(c.contingPct):10),margem:temV(v.margemAlvo)?num(v.margemAlvo):(temV(c.margemPct)?num(c.margemPct):20),c}}
 function calc(v){
-  const lance=num(v.lance), comissao=lance*num(v.comissaoPct)/100;
-  const pagamento=lance+comissao+num(v.taxaPatio)+num(v.taxaAdm)+num(v.outrosArremate);
+  const cu=custas(v);const lance=num(v.lance);
+  const comissao=lance*cu.comPct/100,adm=lance*cu.admPct/100;
+  const extras=num(v.taxaAdm)+num(v.taxaPatio)+num(v.outrosArremate);
+  const pagamento=lance?lance+comissao+adm+cu.fixas+extras:0;
   const porCat={arremate:pagamento,estetica:0,documentacao:0,mecanica:0,transporte:0,outros:0};
   (v.despesas||[]).forEach(d=>{porCat[d.cat]=(porCat[d.cat]||0)+num(d.valor)});
-  const despesas=Object.keys(porCat).filter(k=>k!=="arremate").reduce((a,k)=>a+porCat[k],0);
-  const custo=pagamento+despesas;
+  const real=Object.keys(porCat).filter(k=>k!=="arremate").reduce((a,k)=>a+porCat[k],0);
+  const orc=(v.orcado||[]).filter(o=>o.on!==false);
+  const orcTot=orc.reduce((a,o)=>a+num(o.valor),0),orcPend=orc.filter(o=>!o.feito).reduce((a,o)=>a+num(o.valor),0);
+  const temDoc=(v.despesas||[]).some(d=>d.cat==="documentacao")||orc.some(o=>o.cat==="documentacao");
+  const docsPrev=temDoc?0:cu.docs.reduce((a,d)=>a+num(d.valor),0);
   const vendido=v.status==="vendido"&&num(v.vendaValor)>0;
-  const venda=vendido?num(v.vendaValor):num(v.vendaPretendida);
-  const lucro=venda?venda-custo:0;
-  const roi=custo&&venda?lucro/custo:NaN;
+  const previsto=vendido?0:orcPend+docsPrev;
+  const custo=pagamento+real+previsto;
+  const r=(v.avaliacao&&v.avaliacao.result&&v.avaliacao.result.preco_revenda_sugerido)||{};
   const fipe=num(v.fipe);
+  const V=num(v.vendaPretendida)||((num(r.min)+num(r.max))/2)||fipe*.85;
+  const venda=vendido?num(v.vendaValor):V;
+  const lucro=venda&&(lance||vendido)?venda-custo:NaN;
+  const roi=custo&&venda&&lance?lucro/custo:NaN;
+  const m=cu.margem/100,cont=cu.conting/100;
+  const lmax=V?Math.max(0,(V/(1+m)-cu.fixas-extras-(orcTot+docsPrev)*(1+cont))/(1+(cu.comPct+cu.admPct)/100)):0;
   const dias=v.dataLeilao?Math.max(0,Math.round(((v.dataVenda&&vendido?new Date(v.dataVenda):new Date())-new Date(v.dataLeilao))/864e5)):null;
-  const margem=num(v.margemAlvo||20)/100;
-  return {lance,comissao,pagamento,porCat,despesas,custo,venda,vendido,lucro,roi,fipe,pctFipe:fipe?custo/fipe:NaN,dias,precoMin:custo*(1+margem),margem};
+  return {cu,lance,comissao,adm,extras,pagamento,porCat,despesas:real,real,orcTot,orcPend,docsPrev,previsto,custo,venda,V,vendido,lucro,roi,fipe,pctFipe:fipe?custo/fipe:NaN,dias,precoMin:custo*(1+m),margem:m,lmax};
 }
 function stackHTML(porCat,total,h){
   if(!total)return `<div class="stack" ${h?`style="height:${h}px"`:""}></div>`;
@@ -136,7 +153,7 @@ async function trocarPainel(id){
   const p=paineis.find(x=>x.id===id);if(!p)return;
   painelId=id;papel=p.papel;meuNome=p.meuNome||"";canWrite=papel==="dono"||papel==="editor"||papel==="vistoriador";setRO();
   try{localStorage.setItem("leilaoPainel",id)}catch(e){}
-  renderWho();vehicles=lsLoad(id);render();await loadAll();
+  renderWho();vehicles=lsLoad(id);try{grupos=JSON.parse(localStorage.getItem("leilaoGr_"+id)||"[]")}catch(e){grupos=[]}render();await Promise.all([loadAll(),carregarAux(id)]);
   if(rtCh)sb.removeChannel(rtCh);
   rtCh=sb.channel("veic-"+id).on("postgres_changes",{event:"*",schema:"public",table:"veiculos",filter:"painel_id=eq."+id},pl=>{
     if(painelId!==id)return;
@@ -146,6 +163,10 @@ async function trocarPainel(id){
       if(dirty.has(v.id))return;
       const rows=[...vehicles,...lixo].filter(x=>x.id!==v.id).map(x=>srv[x.id]||x);rows.push(v);montarLista(rows)}
     lsSave();if(!editing&&tab!=="avaliar"&&tab!=="config")render();
+  }).on("postgres_changes",{event:"*",schema:"public",table:"grupos",filter:"painel_id=eq."+id},pl=>{
+    if(painelId!==id)return;if(pl.eventType==="DELETE")grupos=grupos.filter(g=>g.id!==(pl.old&&pl.old.id));
+    else{const g=pl.new;const i=grupos.findIndex(x=>x.id===g.id);if(i>=0)grupos[i]=g;else grupos.push(g)}
+    if(!editing&&tab!=="avaliar"&&tab!=="config")render();
   }).subscribe();
   flush();
 }
@@ -158,6 +179,15 @@ function montarLista(rows){
   pp.forEach(x=>{if(x.set&&!all.find(m=>m.id===x.id))all.push(applySet({id:x.id},x.set))});
   const exc=v=>lixP.has(v.id)?lixP.get(v.id):!!v.excluido;
   vehicles=all.filter(v=>!exc(v));lixo=all.filter(exc);
+}
+async function carregarAux(id){
+  const [g,p,m]=await Promise.all([sb.from("grupos").select("*").eq("painel_id",id).order("data_leilao",{ascending:false}),
+    sb.from("precos").select("item,nome,categoria,valor,origem,familia,atualizado_em").eq("painel_id",id).order("atualizado_em",{ascending:false}).limit(3000),
+    sb.from("membros").select("user_id,nome,papel").eq("painel_id",id)]);
+  if(id!==painelId)return;
+  if(!g.error){grupos=g.data||[];try{localStorage.setItem("leilaoGr_"+id,JSON.stringify(grupos))}catch(e){}}
+  if(!p.error)precos=p.data||[];if(!m.error)membros=m.data||[];
+  if(!editing&&tab!=="avaliar"&&tab!=="config")render();
 }
 async function loadAll(){
   const p=painelId;const {data,error}=await sb.from("veiculos").select("id,dados").eq("painel_id",p).order("id");

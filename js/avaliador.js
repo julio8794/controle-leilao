@@ -229,7 +229,7 @@ function renderAvRes(){
    <div class="chips"><button data-iadd="${k}">＋ Adicionar item</button></div></div>`}).join("")}
   ${r?[["⚠️ Riscos",r.riscos],["📄 Alertas de documentação",r.alertas_documentacao],["🔍 Confira na vistoria presencial",r.dicas_vistoria]].filter(x=>Array.isArray(x[1])&&x[1].length).map(([t,a])=>`<div class="sec-t">${t}</div><div class="card"><ul class="ul">${a.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`).join(""):""}
   <div class="note">Estimativa feita por IA a partir das fotos e da descrição: serve para comparar lotes e definir seu limite de lance, não substitui vistoria presencial. FIPE estimada pela IA pode estar desatualizada: confirme no site oficial.</div>
-  <div class="toolbar" style="margin-top:14px"><button class="btn" id="avSave">💾 ${av.vid&&vehicles.find(v=>v.id===av.vid)?"Atualizar no controle":"Salvar no controle de veículos"}</button><button class="btn ghost" id="avNew">＋ Nova avaliação</button></div>`;
+  <label style="margin-top:14px">Grupo / edital${grupoSelect({grupoId:av.grupoId||fgrupoId},'id="avGr"')}</label><div class="toolbar" style="margin-top:10px"><button class="btn" id="avSave">💾 ${av.vid&&vehicles.find(v=>v.id===av.vid)?"Atualizar no controle":"Salvar no controle de veículos"}</button><button class="btn ghost" id="avNew">＋ Nova avaliação</button></div>`;
   avSum();avSubs();
 }
 function importAv(txt){
@@ -243,17 +243,21 @@ function importAv(txt){
 }
 function saveAv(){
   if(!canWrite){toast("Só o dono do app pode salvar no controle");return}
+  const gs=$("#avGr");av.grupoId=gs?gs.value:(av.grupoId||"");
+  if(grupos.length&&!av.grupoId){toast("Escolha o grupo / edital antes de salvar");if(gs)gs.focus();return}
+  const g=grupos.find(x=>x.id===av.grupoId);
   const c=avCalc();
   let v=av.vid&&vehicles.find(x=>x.id===av.vid);
   const snap={...JSON.parse(JSON.stringify(av)),lanceMax:Math.round(c.real),vid:undefined};
-  const desp=av.itens.filter(i=>i.on!==false&&num(i.valor)>0).map(i=>({id:uid(),cat:i.categoria,desc:i.peca+(i.servico?` (${i.servico})`:""),valor:String(num(i.valor))}));
+  const desp=[],orc=av.itens.filter(i=>num(i.valor)>0).map(i=>({id:uid(),cat:i.categoria,desc:i.peca+(i.servico?` (${i.servico})`:""),valor:String(num(i.valor)),origem:"ia",on:i.on!==false,item:null,evid:i.evidencia||i.motivo||""}));
+  const gx=g?{grupoId:g.id,grupo:g.nome}:{};
   if(!v){
-    v={id:uid(),modelo:av.modelo,ano:av.ano,placa:av.placa||"",leiloeiro:av.leiloeiro||"",lote:av.lote||"",dataLeilao:/^\d{4}-\d{2}-\d{2}$/.test(av.dataLeilao||"")?av.dataLeilao:new Date().toISOString().slice(0,10),status:"avaliacao",fipe:av.fipe||(c.fipeIA?String(Math.round(c.fipeIA)):""),lance:av.lanceAtual||String(Math.round(c.real)),comissaoPct:num(av.comissaoPct),taxaPatio:"",taxaAdm:av.taxas,outrosArremate:"",despesas:desp,vendaPretendida:String(Math.round(c.V)),vendaValor:"",dataVenda:"",margemAlvo:num(av.margem),obs:av.result&&av.result.resumo?"IA: "+av.result.resumo:"",link:av.link,fipeHist:[],criado:Date.now()};
+    v={id:uid(),modelo:av.modelo,ano:av.ano,placa:av.placa||"",leiloeiro:av.leiloeiro||"",lote:av.lote||"",dataLeilao:/^\d{4}-\d{2}-\d{2}$/.test(av.dataLeilao||"")?av.dataLeilao:new Date().toISOString().slice(0,10),status:"avaliacao",fipe:av.fipe||(c.fipeIA?String(Math.round(c.fipeIA)):""),lance:av.lanceAtual||String(Math.round(c.real)),...gx,taxaPatio:"",outrosArremate:"",despesas:desp,orcado:orc,vistoria:{checks:{}},vendaPretendida:String(Math.round(c.V)),vendaValor:"",dataVenda:"",margemAlvo:num(av.margem),obs:av.result&&av.result.resumo?"IA: "+av.result.resumo:"",link:av.link,fipeHist:[],criado:Date.now()};
     vehicles.unshift(v);av.vid=v.id;toast("Salvo como 'Em avaliação' ✓");
   }else{
     Object.assign(v,{link:av.link||v.link,modelo:v.modelo||av.modelo,ano:v.ano||av.ano});
-    if(v.status==="avaliacao"){Object.assign(v,{despesas:desp,lance:av.lanceAtual||String(Math.round(c.real)),comissaoPct:num(av.comissaoPct),taxaAdm:av.taxas,taxaPatio:"",outrosArremate:"",vendaPretendida:String(Math.round(c.V)),margemAlvo:num(av.margem),fipe:av.fipe||v.fipe})}
-    toast(v.status==="avaliacao"?"Avaliação atualizada ✓":"Avaliação anexada ao veículo ✓ (despesas lançadas foram mantidas)");
+    if(v.status==="avaliacao"){Object.assign(v,{...gx,orcado:[...(v.orcado||[]).filter(o=>o.origem!=="ia"),...orc],lance:av.lanceAtual||String(Math.round(c.real)),outrosArremate:"",vendaPretendida:String(Math.round(c.V)),margemAlvo:num(av.margem),fipe:av.fipe||v.fipe})}
+    toast(v.status==="avaliacao"?"Avaliação atualizada ✓":"Avaliação anexada ao veículo ✓ (gastos reais mantidos)");
   }
   v.avaliacao=snap;persist(v);renderAvRes();
 }

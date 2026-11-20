@@ -79,7 +79,7 @@ const CHECKS=[["motor","Motor gira / sem barulho"],["chassi","Chassi confere"],[
 const fmtD=d=>d?d.split("-").reverse().join("/"):"";
 function pacotePendente(p){return p.itens.filter(it=>!vehicles.some(v=>v.id==="alag-"+it[0]||(v.link&&v.link===it[6])))}
 function pacoteBanner(){
-  if(!canWrite||!vehicles.some(v=>v.grupo==="Alagoinhas"))return "";
+  if(!podeGerir()||!vehicles.some(v=>v.grupo==="Alagoinhas"))return "";
   return PACOTES.map(p=>{const pend=pacotePendente(p);if(!pend.length)return "";return `<div class="pkg"><div class="pkg-thumbs">${pend.slice(0,4).map(it=>`<img src="fotos/${it[0]}-1.jpg" alt="">`).join("")}</div>
    <div class="pkg-txt"><span class="pkg-k">📍 ${esc(p.grupo)} · ${fmtD(p.data)}</span><b>${esc(p.titulo)}: ${pend.length} moto(s) com fotos de referência</b><small>${esc(p.leilao)}</small></div>
    <button class="btn" data-pkg="${p.id}">Importar para o sistema</button></div>`}).join("");
@@ -87,15 +87,16 @@ function pacoteBanner(){
 function importarPacote(id){
   if(!canWrite){toast("Só o dono do app pode importar");return}
   const p=PACOTES.find(x=>x.id===id);if(!p)return;let n=0,m=0;
+  const g=grupos.find(x=>norm(x.nome)===norm(p.grupo));if(!g){toast(`Crie antes o grupo “${p.grupo}” em 📁 Editais`);tab="editais";render();return}
   p.itens.forEach(([lote,modelo,ano,cor,lmin,obs,link])=>{
     const fotosRef=[1,2,3,4].map(i=>`fotos/${lote}-${i}.jpg`);
     const ex=vehicles.find(v=>v.id==="alag-"+lote||(v.link&&v.link===link));
-    if(ex){Object.assign(ex,{grupo:p.grupo,dataVistoria:p.data,fotosRef,cor:ex.cor||cor,lanceMin:lmin,localPatio:p.local});ex.vistoria=ex.vistoria||{checks:{},nota:"",limite:"",obs:""};persist(ex);m++;return}
-    const v={id:"alag-"+lote,modelo,ano,cor,placa:"",leiloeiro:"Nordeste Leilões / DETRAN-BA",lote,dataLeilao:"2026-11-25",status:"avaliacao",fipe:"",lance:String(lmin),lanceMin:lmin,comissaoPct:2,taxaPatio:"",taxaAdm:"",outrosArremate:"",despesas:[],vendaPretendida:"",vendaValor:"",dataVenda:"",margemAlvo:20,
-      obs:"Leilão: "+obs,link,grupo:p.grupo,dataVistoria:p.data,localPatio:p.local,fotosRef,vistoria:{checks:{},nota:"",limite:"",obs:""},fipeHist:[],criado:Date.now()};
+    if(ex){Object.assign(ex,{grupo:g.nome,grupoId:g.id,dataVistoria:p.data,fotosRef,cor:ex.cor||cor,lanceMin:lmin,localPatio:p.local});ex.vistoria=ex.vistoria||{checks:{},nota:"",limite:"",obs:""};persist(ex);m++;return}
+    const v={id:"alag-"+lote,modelo,ano,cor,placa:"",leiloeiro:"Nordeste Leilões / DETRAN-BA",lote,dataLeilao:"2026-11-25",status:"avaliacao",fipe:"",lance:String(lmin),lanceMin:lmin,taxaPatio:"",outrosArremate:"",despesas:[],vendaPretendida:"",vendaValor:"",dataVenda:"",margemAlvo:20,
+      obs:"Leilão: "+obs,link,grupo:g.nome,grupoId:g.id,dataVistoria:p.data,localPatio:p.local,fotosRef,vistoria:{checks:{},nota:"",limite:"",obs:""},fipeHist:[],criado:Date.now()};
     vehicles.push(v);persist(v);n++;
   });
-  fgrupo=p.grupo;tab="veiculos";render();toast(`${n} moto(s) importada(s)${m?` · ${m} atualizada(s)`:""} ✓`);
+  fgrupoId=g.id;tab="veiculos";render();toast(`${n} moto(s) importada(s)${m?` · ${m} atualizada(s)`:""} ✓`);
 }
 function vistProg(v){const c=(v.vistoria&&v.vistoria.checks)||{};const done=Object.keys(c).filter(k=>c[k]).length;const pb=Object.values(c).filter(x=>x==="pb").length;return {done,tot:CHECKS.length,pb}}
 let fgrupo="";
@@ -141,118 +142,14 @@ function demo(){
    vendaPretendida:"22900",vendaValor:"",dataVenda:"",obs:"Exemplo — pode apagar.",criado:Date.now()};
   vehicles.unshift(v);persist(v);render();openEditor(v.id);
 }
-function closeEditor(){
-  if(editing&&canWrite){const v=vehicles.find(x=>x.id===editing.id);if(v&&!v.modelo&&!num(v.lance)&&!(v.despesas||[]).length){vehicles=vehicles.filter(x=>x!==v);if(dbCol)dbCol.doc(v.id).delete().catch(()=>{});lsSave()}}
-  editing=null;$("#ov").classList.remove("on");document.body.style.overflow="";render();
-}
 function inp(k,l,o={}){const v=editing[k];return `<label>${l}<input data-k="${k}" ${o.num?'inputmode="decimal" placeholder="0,00"':""} ${o.type?`type="${o.type}"`:""} ${o.ph?`placeholder="${o.ph}"`:""} value="${esc(o.num?fmtIn(v):v)}"></label>`}
 function despSec(cat,title,icon){
   return `<fieldset><legend><span class="dot" style="background:${CATS[cat].c}"></span>${icon} ${title}</legend>
-   <div id="dl-${cat}">${(editing.despesas||[]).filter(d=>d.cat===cat).map(dRow).join("")||`<div class="mini" data-none>Nenhuma despesa lançada.</div>`}</div>
+   <div id="dl-${cat}">${(editing.despesas||[]).filter(d=>d.cat===cat).map(dRow).join("")||`<div class="mini" data-none>Nenhum gasto lançado.</div>`}</div>
    <div class="chips">${PRESETS[cat].map(p=>`<button data-add="${cat}" data-desc="${esc(p)}">＋ ${esc(p)}</button>`).join("")}<button data-add="${cat}" data-desc="">＋ Outro</button></div>
    <div class="calc"><span>Subtotal ${title.toLowerCase()}</span><b id="sub-${cat}">—</b></div></fieldset>`;
 }
-function dRow(d){return `<div class="drow" data-did="${d.id}"><input data-dk="desc" value="${esc(d.desc)}" placeholder="Descrição"><input data-dk="valor" inputmode="decimal" placeholder="R$ 0,00" value="${esc(fmtIn(d.valor))}"><button data-del="${d.id}" aria-label="Remover">✕</button></div>`}
-function openEditor(id,isNew){
-  editing=vehicles.find(v=>v.id===id);if(!editing)return;
-  const v=editing;
-  $("#sheet").innerHTML=`
-  <div class="shead"><div class="row"><button class="btn ghost sm" id="xClose">← Voltar</button><h2 id="eTitle">${esc(v.modelo||"Novo veículo")}</h2></div>
-   <div class="summ"><div><span>Pagamento total</span><b id="sPag">—</b></div><div><span>Despesas</span><b id="sDesp">—</b></div><div><span>Custo total</span><b id="sCusto">—</b></div><div><span>Lucro · ROI</span><b id="sLucro">—</b></div></div>
-   <div style="margin-top:8px" id="sStack"></div></div>
-  <div class="sbody">
-   ${v.fotosRef?`<div class="gal">${v.fotosRef.map((u,i)=>`<button class="gal-i" data-lb="${i}"><img src="${esc(u)}" alt="Foto ${i+1}"></button>`).join("")}</div>
-   <div class="mini" style="margin-top:6px">📍 ${esc(v.grupo||"")} · vistoria ${fmtD(v.dataVistoria)}${v.localPatio?` · ${esc(v.localPatio)}`:""} · toque na foto para ampliar</div>`:""}
-   ${vistoriaHTML(v)}
-   <fieldset><legend>🚗 Veículo</legend>
-    <div class="f2">${inp("modelo","Marca / modelo",{ph:"Ex.: Gol 1.6 Power"})}${inp("ano","Ano",{ph:"2015/2016"})}
-    ${inp("placa","Placa")}<label>Status<select data-k="status">${Object.entries(STATUS).map(([k,n])=>`<option value="${k}" ${v.status===k?"selected":""}>${n}</option>`).join("")}</select></label>
-    ${inp("leiloeiro","Leiloeiro / site")}${inp("lote","Lote")}
-    ${inp("dataLeilao","Data do leilão",{type:"date"})}${inp("fipe","Tabela FIPE (R$)",{num:1})}</div>
-    <div class="f3" style="margin-top:10px">${inp("grupo","Cidade / grupo",{ph:"Ex.: Alagoinhas"})}${inp("dataVistoria","Data da vistoria",{type:"date"})}${inp("cor","Cor")}</div>
-    <div style="margin-top:10px">${inp("link","Link do lote",{ph:"https://…"})}</div>
-    <div class="toolbar" style="margin:10px 0 0">${/^https?:\/\//.test(v.link||"")?`<a class="btn ghost sm" style="text-decoration:none" href="${esc(v.link)}" target="_blank" rel="noopener">🔗 Abrir lote</a>`:""}<button class="btn ghost sm" id="xAval">🤖 ${v.avaliacao?"Ver avaliação IA":"Avaliar com IA"}</button>${v.avaliacao?`<span class="mini" style="margin:0">Lance máx. realista: <b>${brl(v.avaliacao.lanceMax||0)}</b></span>`:""}</div>
-   </fieldset>
-   <fieldset><legend><span class="dot" style="background:var(--c-arremate)"></span>🔨 Arremate e pagamento total</legend>
-    <div class="f3">${inp("lance","Valor do lance (R$)",{num:1})}${inp("comissaoPct","Comissão leiloeiro (%)",{num:1})}${inp("taxaAdm","Taxa administrativa (R$)",{num:1})}
-    ${inp("taxaPatio","Pátio / diárias (R$)",{num:1})}${inp("outrosArremate","Outras taxas (R$)",{num:1})}</div>
-    <div class="calc"><span>Comissão do leiloeiro</span><b id="cCom">—</b></div>
-    <div class="calc big"><span>💰 Pagamento total do arremate</span><b id="cPag">—</b></div>
-    <div class="mini" id="cFipe"></div>
-   </fieldset>
-   ${despSec("estetica","Despesas estéticas","✨")}
-   ${despSec("documentacao","Documentação","📄")}
-   ${despSec("mecanica","Mecânica","🔧")}
-   ${despSec("transporte","Transporte / guincho","🚚")}
-   ${despSec("outros","Outras despesas","➕")}
-   <fieldset><legend>🏷️ Venda e resultado</legend>
-    <div class="f2">${inp("vendaPretendida","Preço de venda alvo (R$)",{num:1})}${inp("margemAlvo","Margem desejada (%)",{num:1})}
-    ${inp("vendaValor","Valor vendido (R$)",{num:1})}${inp("dataVenda","Data da venda",{type:"date"})}</div>
-    <div class="calc"><span>Preço mínimo p/ margem desejada</span><b id="cMin">—</b></div>
-    <div class="calc"><span>Ponto de equilíbrio (sem lucro)</span><b id="cEq">—</b></div>
-    <div class="calc big"><span id="cResL">Lucro</span><b id="cRes">—</b></div>
-    <div class="mini" id="cDias"></div>
-   </fieldset>
-   <fieldset><legend>📈 Controle FIPE × venda</legend>
-    <div id="fipeBox"></div>
-    <div class="toolbar" style="margin:10px 0 0"><button class="btn ghost sm" id="fAdd">＋ Registrar FIPE de hoje</button><a class="lk" style="font-size:13px" href="https://veiculos.fipe.org.br/" target="_blank" rel="noopener">Consultar FIPE oficial ↗</a></div>
-    <div class="mini">Registre a FIPE todo mês para ver se o valor do carro está subindo ou caindo enquanto ele está com você.</div>
-   </fieldset>
-   <fieldset><legend>📝 Observações</legend><label><textarea data-k="obs" rows="3" placeholder="Avarias, pendências, contato do comprador…">${esc(v.obs)}</textarea></label></fieldset>
-   <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="xOk">✓ Concluir</button><button class="btn danger" id="xDel">Excluir veículo</button></div>
-   <div class="confirm" id="cfm">Excluir <b>${esc(v.modelo||"este veículo")}</b> e todas as despesas? <div style="margin-top:8px;display:flex;gap:8px"><button class="btn danger sm" id="cfmY">Sim, excluir</button><button class="btn ghost sm" id="cfmN">Cancelar</button></div></div>
-  </div>`;
-  $("#ov").classList.add("on");$("#ov").scrollTop=0;document.body.style.overflow="hidden";
-  bindEditor();renderFipe();refresh();vistRefresh();renderVF();
-  if(!canWrite)$("#sheet").querySelectorAll("input,select,textarea").forEach(e=>e.disabled=true);
-  if(isNew)setTimeout(()=>$('[data-k="modelo"]').focus(),50);
-}
-function bindEditor(){
-  const s=$("#sheet");
-  s.oninput=e=>{
-    const t=e.target;
-    if(t.dataset.k){editing[t.dataset.k]=t.value;if(t.dataset.k==="modelo")$("#eTitle").textContent=t.value||"Novo veículo"}
-    else if(t.dataset.dk){const d=editing.despesas.find(x=>x.id===t.closest(".drow").dataset.did);if(d)d[t.dataset.dk]=t.value}
-    else if(t.dataset.fh!=null){const h=(editing.fipeHist||[])[+t.dataset.fh];if(h)h[t.dataset.ff]=t.value}
-    else if(t.dataset.vk){editing.vistoria=editing.vistoria||{checks:{}};editing.vistoria[t.dataset.vk]=t.value;persist(editing);return}
-    else return;
-    if(t.dataset.k==="vendaValor"&&num(t.value)>0&&editing.status!=="vendido"){editing.status="vendido";s.querySelector('[data-k="status"]').value="vendido";if(!editing.dataVenda){editing.dataVenda=new Date().toISOString().slice(0,10);s.querySelector('[data-k="dataVenda"]').value=editing.dataVenda}toast("Status alterado para Vendido")}
-    refresh();persist(editing);
-  };
-  s.onchange=e=>{if(e.target.id==='vfIn'){const fs=[...e.target.files];e.target.value='';enfileirarFotos(editing,fs);return}s.oninput(e)};
-  s.onclick=e=>{
-    const t=e.target.closest("button");if(!t)return;
-    if(t.dataset.add){const cat=t.dataset.add;const d={id:uid(),cat,desc:t.dataset.desc,valor:""};editing.despesas=editing.despesas||[];editing.despesas.push(d);
-      const box=$("#dl-"+cat);const n=box.querySelector("[data-none]");if(n)n.remove();box.insertAdjacentHTML("beforeend",dRow(d));
-      const row=box.lastElementChild;row.querySelector(d.desc?'[data-dk="valor"]':'[data-dk="desc"]').focus();persist(editing);refresh()}
-    else if(t.dataset.del){editing.despesas=editing.despesas.filter(x=>x.id!==t.dataset.del);t.closest(".drow").remove();persist(editing);refresh()}
-    else if(t.dataset.cv){const k=t.closest(".seg").dataset.ck;editing.vistoria=editing.vistoria||{checks:{}};editing.vistoria.checks=editing.vistoria.checks||{};const cur=editing.vistoria.checks[k];editing.vistoria.checks[k]=cur===t.dataset.cv?"":t.dataset.cv;t.closest(".seg").querySelectorAll("button").forEach(b=>b.classList.toggle("on",b.dataset.cv===editing.vistoria.checks[k]));vistRefresh();persist(editing)}
-    else if(t.dataset.lb!=null){openLB(editing.fotosRef,+t.dataset.lb)}
-    else if(t.dataset.vfo!=null){openLB((editing.fotosVist||[]).map(f=>f.url),+t.dataset.vfo)}
-    else if(t.dataset.vfx!=null){if(!canWrite)return;if(t.dataset.c!=="1"){t.dataset.c="1";t.textContent="?";setTimeout(()=>{t.dataset.c="";t.textContent="✕"},3000);return}removerFoto(editing,t.dataset.vfx)}
-    else if(t.dataset.fhdel!=null){editing.fipeHist.splice(+t.dataset.fhdel,1);renderFipe();persist(editing)}
-    else if(t.id==="fAdd"){editing.fipeHist=editing.fipeHist||[];editing.fipeHist.push({data:new Date().toISOString().slice(0,10),valor:editing.fipe||""});renderFipe();persist(editing);const r=$("#fhRows").lastElementChild;if(r)r.querySelectorAll("input")[1].focus()}
-    else if(t.id==="xAval"){const v=editing;closeEditor();loadAvFromVehicle(v);tab="avaliar";render();window.scrollTo(0,0)}
-    else if(t.id==="xClose"||t.id==="xOk")closeEditor();
-    else if(t.id==="xDel")$("#cfm").classList.add("on");
-    else if(t.id==="cfmN")$("#cfm").classList.remove("on");
-    else if(t.id==="cfmY"){const id=editing.id;editing=null;$("#ov").classList.remove("on");document.body.style.overflow="";removeV(id);toast("Veículo excluído")}
-  };
-}
-function vistoriaHTML(v){
-  const vs=v.vistoria||{checks:{}};const ck=vs.checks||{};
-  return `<fieldset class="vist"><legend>🔍 Vistoria presencial</legend>
-   <div class="vist-row" style="margin:0 0 10px"><div class="vbar2"><i id="vProg"></i></div><span id="vProgT"></span></div>
-   ${CHECKS.map(([k,l])=>`<div class="chk"><span>${l}</span><div class="seg" data-ck="${k}">${[["ok","✓ OK"],["at","⚠ Atenção"],["pb","✕ Problema"]].map(([val,t])=>`<button class="s-${val} ${ck[k]===val?"on":""}" data-cv="${val}">${t}</button>`).join("")}</div></div>`).join("")}
-   <div class="f2" style="margin-top:12px"><label>Nota geral (0–10)<input data-vk="nota" inputmode="numeric" value="${esc(vs.nota??"")}" placeholder="Ex.: 7"></label><label>Meu lance limite (R$)<input data-vk="limite" inputmode="decimal" value="${esc(fmtIn(vs.limite))}" placeholder="Até quanto vou"></label></div>
-   ${v.lanceMin?`<div class="mini">Lance mínimo do leilão: <b>${brl(v.lanceMin)}</b></div>`:""}
-   <label style="margin-top:10px">Anotações da vistoria<textarea data-vk="obs" rows="3" placeholder="O que viu no pátio: barulho, peças faltando, ferrugem…">${esc(vs.obs||"")}</textarea></label>
-   <div class="sec-t" style="margin:16px 0 8px">📷 Fotos da vistoria</div>
-   <div class="vf" id="vfBox"></div>
-   <label class="btn ghost sm vf-add"><input type="file" id="vfIn" accept="image/*" multiple hidden>📷 Tirar / adicionar fotos</label>
-   <div class="mini" id="vfSt"></div>
-  </fieldset>`;
-}
+function dRow(d){return `<div class="drow nf" data-did="${d.id}"><input data-dk="desc" list="dlPecas" value="${esc(d.desc)}" placeholder="Descrição"><input data-dk="valor" inputmode="decimal" placeholder="R$ 0,00" value="${esc(fmtIn(d.valor))}"><label class="nf-b" title="Foto da nota fiscal">📎<input type="file" accept="image/*" hidden data-nf="${d.id}"></label><button data-del="${d.id}" aria-label="Remover">✕</button></div>`}
 async function renderVF(){const b=$("#vfBox");if(!b||!editing)return;const v=editing;const a=v.fotosVist||[];const pq=await fqPendentes(v.id);if(editing!==v)return;
   const pend=pq.map(r=>{fqUrls[r.id]=fqUrls[r.id]||URL.createObjectURL(r.blob);return `<div class="vf-i pend"><img src="${fqUrls[r.id]}" alt=""><span class="vf-q">⏳</span></div>`}).join("");
   b.innerHTML=(a.length||pq.length)?a.map((f,i)=>`<div class="vf-i"><button data-vfo="${i}"><img src="${esc(f.url)}" alt="" loading="lazy"></button>${f.item?`<span class="vf-tag">${esc((CHECKS.find(c=>c[0]===f.item)||[0,f.item])[1])}</span>`:""}<button class="vf-x" data-vfx="${esc(f.path||"")}" aria-label="Remover">✕</button></div>`).join("")+pend:`<div class="mini" style="margin:0">Nenhuma foto ainda. As fotos ficam salvas para toda a equipe (e esperam o sinal voltar, se faltar internet).</div>`}
@@ -283,22 +180,6 @@ function fipeInfo(){
   }
   el.innerHTML=out;
 }
-function refresh(){
-  fipeInfo();
-  const c=calc(editing);
-  $("#sPag").textContent=brl(c.pagamento);$("#sDesp").textContent=brl(c.despesas);$("#sCusto").textContent=brl(c.custo);
-  const l=$("#sLucro");l.textContent=c.venda?`${pct(c.roi)}`:"—";l.className=c.venda?(c.lucro>=0?"pos":"neg"):"";
-  $("#sStack").innerHTML=stackHTML(c.porCat,c.custo,8);
-  $("#cCom").textContent=brl(c.comissao);$("#cPag").textContent=brl(c.pagamento);
-  $("#cFipe").textContent=c.fipe?`Arremate = ${pct(c.pagamento/c.fipe)} da FIPE · custo total = ${pct(c.pctFipe)} da FIPE`:"Informe a FIPE para comparar.";
-  ["estetica","documentacao","mecanica","transporte","outros"].forEach(k=>$("#sub-"+k).textContent=brl(c.porCat[k]));
-  $("#cMin").textContent=brl(c.precoMin);$("#cEq").textContent=brl(c.custo);
-  $("#cResL").textContent=c.vendido?"✅ Lucro realizado":"📈 Lucro projetado (preço alvo)";
-  const r=$("#cRes");r.textContent=c.venda?`${brl(c.lucro)} · ${pct(c.roi)}`:"informe o preço";r.style.color=c.venda?(c.lucro>=0?"var(--good)":"var(--bad)"):"";
-  $("#cDias").textContent=c.dias!=null?`${c.dias} dia(s) ${c.vendido?"do leilão até a venda":"desde o leilão"}${c.venda&&c.dias?` · lucro por dia: ${brl(c.lucro/Math.max(c.dias,1))}`:""}`:"";
-}
-
-/* ---------- lightbox ---------- */
 let lbArr=[],lbI=0;
 function openLB(arr,i){lbArr=arr;lbI=i;const el=$("#lb");el.classList.add("on");showLB()}
 function showLB(){$("#lbImg").src=lbArr[lbI];$("#lbN").textContent=`${lbI+1} / ${lbArr.length}`}
