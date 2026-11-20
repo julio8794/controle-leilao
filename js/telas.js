@@ -10,29 +10,29 @@ function renderBg(){
   bindMain();
 }
 function vivos(){return vehicles}
+// "minha" = já arrematada (arrematado, em preparação, à venda ou vendida). Em avaliação = ainda na vistoria.
+const MINHA=v=>(v.status||"avaliacao")!=="avaliacao";
+const minhas=()=>vivos().filter(MINHA),emVistoria=()=>vivos().filter(v=>!MINHA(v));
 function painelBody(){
-  const all=vivos().map(v=>({v,c:calc(v)}));
-  const cs=all.filter(x=>x.v.status!=="avaliacao");
+  const cs=minhas().map(v=>({v,c:calc(v)}));
   const vend=cs.filter(x=>x.c.vendido),est=cs.filter(x=>!x.c.vendido);
   const empatado=est.reduce((a,{c})=>a+c.pagamento+c.real,0),aGastar=est.reduce((a,{c})=>a+c.previsto,0),retorno=est.reduce((a,{c})=>a+(c.venda||0),0);
   const lucroReal=vend.reduce((a,{c})=>a+c.lucro,0),custoVend=vend.reduce((a,{c})=>a+c.custo,0);
   const lucroProj=est.reduce((a,{c})=>a+(isFinite(c.lucro)?c.lucro:0),0);
   const diasV=vend.map(x=>x.c.dias).filter(d=>d!=null);const giro=diasV.length?Math.round(diasV.reduce((a,b)=>a+b,0)/diasV.length):null;
   // prazos
-  const pzs=[];vivos().forEach(v=>prazosDe(v).filter(p=>!p.feito).forEach(p=>pzs.push({...p,v})));pzs.sort((a,b)=>a.d-b.d);
+  const pzs=[];minhas().forEach(v=>prazosDe(v).filter(p=>!p.feito).forEach(p=>pzs.push({...p,v})));pzs.sort((a,b)=>a.d-b.d);
   // lucro por mês
   const mes={};vend.forEach(({v,c})=>{const k=(v.dataVenda||"").slice(0,7);if(k)mes[k]=(mes[k]||0)+c.lucro});
   const meses=Object.keys(mes).sort().slice(-6);const mx=Math.max(1,...meses.map(k=>Math.abs(mes[k])));
-  // vistorias por grupo
-  const emAval=all.filter(x=>x.v.status==="avaliacao");
-  const porG={};emAval.forEach(({v})=>{const k=v.grupoId||"";(porG[k]=porG[k]||[]).push(v)});
   // sócios
   const soc={};cs.forEach(({v,c})=>{const s=v.socios||[];const t=s.reduce((a,x)=>a+num(x.aporte),0);if(!t)return;s.forEach(x=>{const n=(x.nome||"—").trim();soc[n]=soc[n]||{ap:0,lu:0};soc[n].ap+=num(x.aporte);if(isFinite(c.lucro))soc[n].lu+=c.lucro*num(x.aporte)/t})});
-  const cnt={};Object.keys(STATUS).forEach(s=>cnt[s]=vivos().filter(v=>(v.status||"arrematado")===s).length);
+  const STM=Object.keys(STATUS).filter(k=>k!=="avaliacao");const cnt={};STM.forEach(s=>cnt[s]=cs.filter(x=>x.v.status===s).length);
+  const emAv=emVistoria().length;
   return `
   ${pzs.length?`<div class="sec-t">⏰ Próximos prazos</div><div class="card">${pzs.slice(0,6).map(p=>`<div class="pzl ${p.dias<0?"atr":p.dias<=3?"perto":""}" data-open="${p.v.id}"><b>${esc(p.t)}</b><span>${esc(p.v.modelo||"")}${p.v.lote?" · lote "+esc(p.v.lote):""}</span><em>${p.dias<0?`atrasado ${-p.dias}d`:p.dias===0?"hoje":`${p.d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})} · ${p.dias}d`}</em></div>`).join("")}</div>`:""}
-  ${Object.keys(porG).length?`<div class="sec-t">🔍 Vistorias em andamento</div><div class="grid kpis">${Object.entries(porG).map(([gid,vs])=>{const g=grupos.find(x=>x.id===gid);const ok=vs.filter(v=>vistProg(v).done>=CHECKS.length||(v.vistoria&&v.vistoria.status==="vistoriada")).length;
-    return `<div class="card kpi" data-gver2="${gid}" style="cursor:pointer"><span>${esc(g?g.nome:"Sem grupo")}</span><b class="num">${ok}/${vs.length}</b><small>vistoriadas${g&&g.data_leilao?` · leilão ${fmtD(g.data_leilao)}`:""}</small><div class="vbar2" style="margin-top:8px"><i style="width:${vs.length?ok/vs.length*100:0}%"></i></div></div>`}).join("")}</div>`:""}
+  <div class="sec-t">🏍 Minhas motos · ${cs.length}</div>
+  ${cs.length?`<div class="grid list minhas">${cs.sort((a,b)=>(a.v.status==="vendido")-(b.v.status==="vendido")||(b.v.criado||0)-(a.v.criado||0)).map(({v,c})=>minhaCard(v,c)).join("")}</div>`:`<div class="card empty"><p>Nenhuma moto arrematada ainda.${emAv?` Há ${emAv} em vistoria na aba Veículos.`:""}</p></div>`}
   <div class="fin">
   <div class="sec-t">💵 Caixa</div>
   <div class="grid kpis">
@@ -44,16 +44,24 @@ function painelBody(){
   ${meses.length?`<div class="sec-t">📅 Lucro por mês</div><div class="card"><div class="bars">${meses.map(k=>`<div class="bar"><i class="${mes[k]<0?"neg":""}" style="height:${Math.abs(mes[k])/mx*100}%"></i><b>${brl(mes[k]).replace(",00","")}</b><span>${k.slice(5)}/${k.slice(2,4)}</span></div>`).join("")}</div></div>`:""}
   ${Object.keys(soc).length?`<div class="sec-t">🤝 Sócios</div><div class="card">${Object.entries(soc).map(([n,x])=>`<div class="rank"><span class="nm">${esc(n)}</span><span class="mini" style="margin:0">aportou ${brl(x.ap)}</span><b class="num ${x.lu>=0?"pos":"neg"}">${brl(x.lu)}</b></div>`).join("")}<div class="mini">Lucro previsto + realizado, dividido pelo aporte em cada moto.</div></div>`:""}
   <div class="sec-t">Status da frota</div>
-  <div class="card"><div class="stack" style="height:18px">${Object.keys(STATUS).map(s=>cnt[s]?`<i style="width:${cnt[s]/Math.max(1,vivos().length)*100}%;background:${STCOL[s]}"></i>`:"").join("")}</div>
-  <div class="legend">${Object.keys(STATUS).map(s=>`<div><span class="dot" style="background:${STCOL[s]}"></span>${STATUS[s]}<span class="v">${cnt[s]}</span></div>`).join("")}</div></div>
+  <div class="card"><div class="stack" style="height:18px">${STM.map(s=>cnt[s]?`<i style="width:${cnt[s]/Math.max(1,cs.length)*100}%;background:${STCOL[s]}"></i>`:"").join("")}</div>
+  <div class="legend">${STM.map(s=>`<div><span class="dot" style="background:${STCOL[s]}"></span>${STATUS[s]}<span class="v">${cnt[s]}</span></div>`).join("")}</div></div>
   </div>`;
 }
+function minhaCard(v,c){const s=v.status;const pz=prazosDe(v).filter(p=>!p.feito).sort((a,b)=>a.d-b.d)[0];
+  return `<div class="card vcard minha" data-open="${v.id}">
+    <div class="vtop"><div><h3>${esc(v.modelo||"Sem nome")} ${v.ano?`<span style="color:var(--mut);font-weight:500">${esc(v.ano)}</span>`:""}</h3><div class="sub">${[v.placa,v.lote&&"Lote "+v.lote,v.retirado?"✓ comigo":(v.nota&&v.nota.patio?"📍 "+v.nota.patio:"")].filter(Boolean).map(esc).join(" · ")||"—"}</div></div><span class="chip st-${s}">${STATUS[s]}</span></div>
+    ${(v.alertasDocs||[]).length?`<div class="mini neg">⚠ ${esc(v.alertasDocs[0].txt)}${v.alertasDocs.length>1?` (+${v.alertasDocs.length-1})`:""}</div>`:""}
+    <div class="fin"><div style="margin-top:10px">${stackHTML(c.porCat,c.custo,8)}</div>
+    <div class="vnums"><div><span>Custo total</span><b>${brl(c.custo)}</b></div><div><span>${c.vendido?"Vendido":"Venda alvo"}</span><b>${c.venda?brl(c.venda):"—"}</b></div><div><span>${c.vendido?"Lucro real":"Lucro previsto"}</span><b class="${c.lucro>=0?"pos":"neg"}">${isFinite(c.lucro)?brl(c.lucro):"—"}</b></div></div></div>
+    <div class="mini">${c.dias!=null?`${c.dias} dias desde o leilão`:""}${pz?` · ⏰ ${esc(pz.t)} ${pz.dias<0?`<b class="neg">atrasado ${-pz.dias}d</b>`:pz.dias===0?"hoje":"em "+pz.dias+"d"}`:""}</div>
+  </div>`}
 function painel(){if(!vivos().length)return pacoteBanner()+emptyHTML();return pacoteBanner()+painelBody()}
 function filtrados(){const f=filtro.toLowerCase();
-  return vivos().filter(v=>(!fstatus||(v.status||"arrematado")===fstatus)&&(!fgrupoId||v.grupoId===fgrupoId)&&(!f||[v.modelo,v.placa,v.leiloeiro,v.lote,v.grupo,v.cor,(v.vistoria||{}).resp].join(" ").toLowerCase().includes(f)))}
+  return emVistoria().filter(v=>(!fgrupoId||v.grupoId===fgrupoId)&&(!f||[v.modelo,v.placa,v.leiloeiro,v.lote,v.grupo,v.cor,(v.vistoria||{}).resp].join(" ").toLowerCase().includes(f)))}
 function barraFiltro(){return `${pacoteBanner()}<div class="toolbar"><input id="busca" placeholder="Buscar modelo, lote, responsável…" value="${esc(filtro)}">
   <select id="fgr"><option value="">Todos os editais</option>${grupos.map(g=>`<option value="${g.id}" ${fgrupoId===g.id?"selected":""}>${esc(g.nome)}</option>`).join("")}</select>
-  <select id="fst"><option value="">Todos os status</option>${Object.entries(STATUS).map(([k,n])=>`<option value="${k}" ${fstatus===k?"selected":""}>${n}</option>`).join("")}</select>
+  
   ${podeGerir()?`<div class="toolbar" style="margin:0;width:100%"><button class="btn ghost sm" id="impLink">🔗 Lote por link</button><button class="btn ghost sm" id="impPl">⬆ Planilha</button><button class="btn ghost sm" id="impAudio">🎤 Áudio de vistoria</button><button class="btn ghost sm fin" id="expPl">⬇ Exportar</button></div>`:""}<div class="seg2"><button data-vm="lista" class="${vmodo==="lista"?"on":""}">📋 Lista</button><button data-vm="comparar" class="${vmodo==="comparar"?"on":""} fin">🏁 Comparar</button></div></div>`}
 // Lucro em R$ e última atualização em todo card da lista.
 // Em avaliação estima o lucro se arrematar pelo lance atual do leilão (ou o lance mínimo).
@@ -70,6 +78,7 @@ function barraLances(){const ms=filtrados().filter(v=>(v.status||"avaliacao")===
   return `<div class="lances-bar fin"><button class="btn sm" id="listaLances">🔄 Puxar lances atuais${fgrupoId?" do edital":""}</button><span>${ms.length} moto(s) em avaliação · ${ult.length?`mais antigo lido ${haQuanto(velho)}`:"nenhum lance lido ainda"}</span></div>`}
 function lista(){
   if(!vivos().length)return barraFiltro()+emptyHTML();
+  if(!emVistoria().length)return barraFiltro()+`<div class="card empty"><div class="big">🔍</div><h3>Nenhuma moto em vistoria</h3><p>As motos já arrematadas ficam na aba 📊 Painel, em "Minhas motos". Importe um edital ou um lote por link para avaliar novas motos.</p></div>`;
   const arr=filtrados();
   return barraFiltro()+barraLances()+`<div class="grid list">${arr.map(v=>{const c=calc(v);const s=v.status||"arrematado";const vp=vistProg(v);const vs=v.vistoria||{};const g=grupoDe(v);const nt=notaFinal(v);
     return `<div class="card vcard ${v.fotosRef?"has-cover":""}" data-open="${v.id}">

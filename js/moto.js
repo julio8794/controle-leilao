@@ -13,11 +13,14 @@ function prazosDe(v){
   const out=[];if(temV(c.prazoPagamentoH))out.push({k:"pago",t:"Pagar lote + taxas",d:add(d0,num(c.prazoPagamentoH))});
   const lib=temV(c.liberacaoDias)?add(d0,num(c.liberacaoDias)*24):null;if(lib)out.push({k:"retirada",t:"Retirada liberada no pátio",d:lib});
   if(temV(c.prazoTransferenciaDias))out.push({k:"transferido",t:"Transferir no DETRAN (multa se atrasar)",d:add(lib||d0,num(c.prazoTransferenciaDias)*24)});
-  const pz=v.prazos||{};return out.map(x=>({...x,feito:!!pz[x.k],dias:Math.ceil((x.d-new Date())/864e5)}));
+  // prazos da nota de arremate (retirada e perda do bem), se ainda não retirou
+  const n=v.nota||{};if(n.retiradaDias&&!v.retirado&&!out.some(x=>x.k==="retirada")){out.push({k:"retirada",t:`Retirar do pátio${n.estadiaDia?` (depois R$ ${n.estadiaDia}/dia)`:""}`,d:add(d0,num(n.retiradaDias)*24)});
+    if(n.perdaDias)out.push({k:"perda",t:"Perde o bem se não retirar",d:add(d0,num(n.perdaDias)*24)})}
+  const pz=v.prazos||{};if(v.retirado)pz.retirada=true;return out.map(x=>({...x,feito:!!pz[x.k],dias:Math.ceil((x.d-new Date())/864e5)}));
 }
 function openEditor(id,isNew){
   editing=vehicles.find(v=>v.id===id);if(!editing)return;
-  etab=isNew?"dados":(papel==="vistoriador"?"vistoria":etab||"vistoria");
+  const minha=MINHA(editing);etab=isNew?"dados":(papel==="vistoriador"?"vistoria":minha?(etab&&etab!=="vistoria"&&etab!=="leilao"?etab:"numeros"):(etab||"vistoria"));
   renderEditor();$("#ov").classList.add("on");$("#ov").scrollTop=0;document.body.style.overflow="hidden";
   if(isNew)setTimeout(()=>{const m=$('[data-k="modelo"]');if(m)m.focus()},80);
 }

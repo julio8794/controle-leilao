@@ -354,3 +354,4 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 input[hidden],label input[hidden]{display:none!important}
 .cvg{margin-top:10px}.cvg-t{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin-bottom:2px}
 .cvc{margin-top:6px!important}.cvc small{font-size:11px}
+.vcard.minha{cursor:pointer}
