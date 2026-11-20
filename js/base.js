@@ -13,8 +13,8 @@ const PRESETS={
   transporte:["Guincho/remoção","Diárias de pátio extra","Combustível/frete"],
   outros:["Anúncio (OLX/Webmotors)","Comissão de venda","Seguro temporário"]
 };
-const STCOL={avaliacao:"#8b98a8",arrematado:"#4c8dff",preparacao:"#d16bff",avenda:"#f5a524",vendido:"#3fb950"};
-const STATUS={avaliacao:"Em avaliação",arrematado:"Arrematado",preparacao:"Em preparação",avenda:"À venda",vendido:"Vendido"};
+const STCOL={avaliacao:"#8b98a8",arrematado:"#4c8dff",preparacao:"#d16bff",avenda:"#f5a524",vendido:"#3fb950",descartada:"#5b6472"};
+const STATUS={avaliacao:"Em avaliação",arrematado:"Arrematado",preparacao:"Em preparação",avenda:"À venda",vendido:"Vendido",descartada:"Sem interesse"};
 
 let vehicles=[], dbCol=null, mode="local", tab="painel", editing=null, dirty=new Set(), saveTimers={}, filtro="", fstatus="";
 const $=s=>document.querySelector(s);
@@ -33,6 +33,20 @@ function custas(v){const c=(grupoDe(v)||{}).custas||{};
   return {comPct:temV(v.comissaoPct)?num(v.comissaoPct):num(c.comissaoPct),admPct:temV(v.taxaAdmPct)?num(v.taxaAdmPct):num(c.taxaAdmPct),
     fixas:(c.taxasFixas||[]).reduce((a,t)=>a+num(t.valor),0),taxasFixas:c.taxasFixas||[],docs:c.docs||[],
     conting:temV(v.conting)?num(v.conting):(temV(c.contingPct)?num(c.contingPct):10),margem:temV(v.margemAlvo)?num(v.margemAlvo):(temV(c.margemPct)?num(c.margemPct):20),c}}
+/* ----- configuração de custos do painel (Config → Custos padrão) ----- */
+const SERVICOS=[["transferencia","Transferência do veículo"],["transfEstado","Transferência de estado (veículo de outra UF)"],["vistoria","Vistoria (ECV / DETRAN)"],["desalienacao","Desalienação / baixa de gravame"]];
+const PCFG_PADRAO={pctFipe:70,ufBase:"BA",servicos:{transferencia:"",transfEstado:"",vistoria:"",desalienacao:""}};
+let PCFG=JSON.parse(JSON.stringify(PCFG_PADRAO));
+function aplicarPCFG(c){const x=(c&&c.custos)||{};PCFG={...PCFG_PADRAO,...x,servicos:{...PCFG_PADRAO.servicos,...(x.servicos||{})}}}
+function ufDoVeiculo(v){return String(v.uf||(v.editalLote&&v.editalLote.uf)||"").toUpperCase().trim()}
+// serviços fixos que se aplicam à moto: liga/desliga automático + escolha manual (v.servicos[k]=true/false); pago = há despesa com serv=k
+function servicosDe(v){const ov=v.servicos||{};const uf=ufDoVeiculo(v);
+  const alien=!!v.desalienacao||(v.alertasDocs||[]).some(a=>/aliena|gravame/i.test(a.txt))||(v.consultasExt||[]).some(c=>c.ok&&c.produto==="sng-gravames"&&/alienad|ativo/i.test(JSON.stringify(c.resultado||"")));
+  const auto={transferencia:true,vistoria:true,transfEstado:!!(uf&&PCFG.ufBase&&uf!==String(PCFG.ufBase).toUpperCase()),desalienacao:alien};
+  const motivo={transfEstado:uf?`veículo de ${uf}`:"UF do veículo desconhecida",desalienacao:alien?"indício de alienação/gravame":"sem indício de gravame"};
+  return SERVICOS.map(([k,n])=>{const valor=num(PCFG.servicos[k]);const on=ov[k]!==undefined?!!ov[k]:auto[k];const pago=(v.despesas||[]).some(d=>d.serv===k);
+    return {k,n,valor,on,auto:auto[k],manual:ov[k]!==undefined,pago,motivo:motivo[k]||""}})}
+const pctFipeDe=v=>num(v.pctFipe)||num(PCFG.pctFipe)||70;
 function calc(v){
   const cu=custas(v);const lance=num(v.lance);
   const comissao=lance*cu.comPct/100,adm=lance*cu.admPct/100;
@@ -43,8 +57,11 @@ function calc(v){
   const real=Object.keys(porCat).filter(k=>k!=="arremate").reduce((a,k)=>a+porCat[k],0);
   const orc=(v.orcado||[]).filter(o=>o.on!==false);
   const orcTot=orc.reduce((a,o)=>a+num(o.valor),0),orcPend=orc.filter(o=>!o.feito).reduce((a,o)=>a+num(o.valor),0);
-  const temDoc=(v.despesas||[]).some(d=>d.cat==="documentacao")||orc.some(o=>o.cat==="documentacao");
-  const docsPrev=temDoc?0:cu.docs.reduce((a,d)=>a+num(d.valor),0);
+  const servs=servicosDe(v);const usaServ=servs.some(x=>x.valor>0);
+  const servPrev=servs.filter(x=>x.on&&!x.pago).reduce((a,x)=>a+x.valor,0);
+  // documentação: serviços do Config (se configurados) substituem a documentação típica do edital, para não contar em dobro
+  const temDoc=(v.despesas||[]).some(d=>d.cat==="documentacao"&&!d.serv)||orc.some(o=>o.cat==="documentacao"&&o.origem!=="documento");
+  const docsPrev=usaServ?servPrev:(temDoc?0:cu.docs.reduce((a,d)=>a+num(d.valor),0));
   const vendido=v.status==="vendido"&&num(v.vendaValor)>0;
   const previsto=vendido?0:orcPend+docsPrev;
   const custo=pagamento+real+previsto;
@@ -55,9 +72,12 @@ function calc(v){
   const lucro=venda&&(lance||vendido)?venda-custo:NaN;
   const roi=custo&&venda&&lance?lucro/custo:NaN;
   const m=cu.margem/100,cont=cu.conting/100;
-  const lmax=V?Math.max(0,(V/(1+m)-cu.fixas-extras-(orcTot+docsPrev)*(1+cont))/(1+(cu.comPct+cu.admPct)/100)):0;
+  // lance máximo = SÓ o lance. Teto do investimento = FIPE × % escolhida; dele saem custas do edital, pendências/documentação e o orçamento da vistoria (+ reserva).
+  const pctF=pctFipeDe(v),teto=fipe?fipe*pctF/100:0;const custosFora=cu.fixas+extras+orcTot*(1+cont)+docsPrev;const divisor=1+(cu.comPct+cu.admPct)/100;
+  const lmax=teto?Math.max(0,(teto-custosFora)/divisor):(V?Math.max(0,(V/(1+m)-cu.fixas-extras-(orcTot+docsPrev)*(1+cont))/divisor):0);
+  const lmaxBase=teto?"fipe":(V?"margem":"");
   const dias=v.dataLeilao?Math.max(0,Math.round(((v.dataVenda&&vendido?new Date(v.dataVenda):new Date())-new Date(v.dataLeilao))/864e5)):null;
-  return {cu,lance,comissao,adm,extras,pagamento,porCat,despesas:real,real,orcTot,orcPend,docsPrev,previsto,custo,venda,V,vendido,lucro,roi,fipe,pctFipe:fipe?custo/fipe:NaN,dias,precoMin:custo*(1+m),margem:m,lmax};
+  return {servs,servPrev,usaServ,pctF,teto,custosFora,lmaxBase,cu,lance,comissao,adm,extras,pagamento,porCat,despesas:real,real,orcTot,orcPend,docsPrev,previsto,custo,venda,V,vendido,lucro,roi,fipe,pctFipe:fipe?custo/fipe:NaN,dias,precoMin:custo*(1+m),margem:m,lmax};
 }
 function stackHTML(porCat,total,h){
   if(!total)return `<div class="stack" ${h?`style="height:${h}px"`:""}></div>`;
@@ -184,12 +204,15 @@ function montarLista(rows){
   vehicles=all.filter(v=>!exc(v));lixo=all.filter(exc);
 }
 async function carregarAux(id){
-  const [g,p,m]=await Promise.all([sb.from("grupos").select("*").eq("painel_id",id).order("data_leilao",{ascending:false}),
+  try{aplicarPCFG(JSON.parse(localStorage.getItem("leilaoCfg_"+id)||"null"))}catch(e){}
+  const [g,p,m,pc]=await Promise.all([sb.from("grupos").select("*").eq("painel_id",id).order("data_leilao",{ascending:false}),
     sb.from("precos").select("item,nome,categoria,valor,origem,familia,atualizado_em").eq("painel_id",id).order("atualizado_em",{ascending:false}).limit(3000),
-    sb.from("membros").select("user_id,nome,papel").eq("painel_id",id)]);
+    sb.from("membros").select("user_id,nome,papel").eq("painel_id",id),
+    sb.from("paineis").select("config").eq("id",id).maybeSingle()]);
   if(id!==painelId)return;
   if(!g.error){grupos=g.data||[];try{localStorage.setItem("leilaoGr_"+id,JSON.stringify(grupos))}catch(e){}}
   if(!p.error)precos=p.data||[];if(!m.error)membros=m.data||[];
+  if(pc&&!pc.error&&pc.data){aplicarPCFG(pc.data.config);try{localStorage.setItem("leilaoCfg_"+id,JSON.stringify(pc.data.config||{}))}catch(e){}}
   if(!editing&&tab!=="avaliar"&&tab!=="config")render();
 }
 async function loadAll(){

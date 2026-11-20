@@ -11,8 +11,9 @@ function renderBg(){
 }
 function vivos(){return vehicles}
 // "minha" = já arrematada (arrematado, em preparação, à venda ou vendida). Em avaliação = ainda na vistoria.
-const MINHA=v=>(v.status||"avaliacao")!=="avaliacao";
-const minhas=()=>vivos().filter(MINHA),emVistoria=()=>vivos().filter(v=>!MINHA(v));
+const MINHA=v=>!["avaliacao","descartada"].includes(v.status||"avaliacao");
+const minhas=()=>vivos().filter(MINHA),emVistoria=()=>vivos().filter(v=>(v.status||"avaliacao")==="avaliacao"),descartadas=()=>vivos().filter(v=>v.status==="descartada");
+let verDesc=false;
 function painelBody(){
   const cs=minhas().map(v=>({v,c:calc(v)}));
   const vend=cs.filter(x=>x.c.vendido),est=cs.filter(x=>!x.c.vendido);
@@ -27,7 +28,7 @@ function painelBody(){
   const meses=Object.keys(mes).sort().slice(-6);const mx=Math.max(1,...meses.map(k=>Math.abs(mes[k])));
   // sócios
   const soc={};cs.forEach(({v,c})=>{const s=v.socios||[];const t=s.reduce((a,x)=>a+num(x.aporte),0);if(!t)return;s.forEach(x=>{const n=(x.nome||"—").trim();soc[n]=soc[n]||{ap:0,lu:0};soc[n].ap+=num(x.aporte);if(isFinite(c.lucro))soc[n].lu+=c.lucro*num(x.aporte)/t})});
-  const STM=Object.keys(STATUS).filter(k=>k!=="avaliacao");const cnt={};STM.forEach(s=>cnt[s]=cs.filter(x=>x.v.status===s).length);
+  const STM=Object.keys(STATUS).filter(k=>!["avaliacao","descartada"].includes(k));const cnt={};STM.forEach(s=>cnt[s]=cs.filter(x=>x.v.status===s).length);
   const emAv=emVistoria().length;
   return `
   ${pzs.length?`<div class="sec-t">⏰ Próximos prazos</div><div class="card">${pzs.slice(0,6).map(p=>`<div class="pzl ${p.dias<0?"atr":p.dias<=3?"perto":""}" data-open="${p.v.id}"><b>${esc(p.t)}</b><span>${esc(p.v.modelo||"")}${p.v.lote?" · lote "+esc(p.v.lote):""}</span><em>${p.dias<0?`atrasado ${-p.dias}d`:p.dias===0?"hoje":`${p.d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})} · ${p.dias}d`}</em></div>`).join("")}</div>`:""}
@@ -58,38 +59,85 @@ function minhaCard(v,c){const s=v.status;const pz=prazosDe(v).filter(p=>!p.feito
   </div>`}
 function painel(){if(!vivos().length)return pacoteBanner()+emptyHTML();return pacoteBanner()+painelBody()}
 function filtrados(){const f=filtro.toLowerCase();
-  return emVistoria().filter(v=>(!fgrupoId||v.grupoId===fgrupoId)&&(!f||[v.modelo,v.placa,v.leiloeiro,v.lote,v.grupo,v.cor,(v.vistoria||{}).resp].join(" ").toLowerCase().includes(f)))}
+  return (verDesc?descartadas():emVistoria()).filter(v=>(!fgrupoId||v.grupoId===fgrupoId)&&(!f||[v.modelo,v.placa,v.leiloeiro,v.lote,v.grupo,v.cor,(v.vistoria||{}).resp].join(" ").toLowerCase().includes(f)))}
 function barraFiltro(){return `${pacoteBanner()}<div class="toolbar"><input id="busca" placeholder="Buscar modelo, lote, responsável…" value="${esc(filtro)}">
   <select id="fgr"><option value="">Todos os editais</option>${grupos.map(g=>`<option value="${g.id}" ${fgrupoId===g.id?"selected":""}>${esc(g.nome)}</option>`).join("")}</select>
   
   ${podeGerir()?`<div class="toolbar" style="margin:0;width:100%"><button class="btn ghost sm" id="impLink">🔗 Lote por link</button><button class="btn ghost sm" id="impPl">⬆ Planilha</button><button class="btn ghost sm" id="impAudio">🎤 Áudio de vistoria</button><button class="btn ghost sm fin" id="expPl">⬇ Exportar</button></div>`:""}<div class="seg2"><button data-vm="lista" class="${vmodo==="lista"?"on":""}">📋 Lista</button><button data-vm="comparar" class="${vmodo==="comparar"?"on":""} fin">🏁 Comparar</button></div></div>`}
 // Lucro em R$ e última atualização em todo card da lista.
 // Em avaliação estima o lucro se arrematar pelo lance atual do leilão (ou o lance mínimo).
-// Lucro em R$ calculado no LANCE MÁXIMO (seu limite ou o lance máx. calculado); vendida = lucro real.
-function lucroLinha(v,c,s){
-  const la=laInfo(v);let k=c,base="venda realizada";
-  if(!c.vendido){const li=limiteDe(v);if(li&&li.valor){k=calc({...v,lance:String(li.valor)});base=`no lance máx. ${brl(li.valor)} (${li.tipo==="seu limite"?"seu limite":"calculado"})`+(la?` · atual ${brl(la.valor)}${la.valor>li.valor?" ⚠ acima":""}`:"")}else k=null}
-  const ok=k&&isFinite(k.lucro);
-  const ts=la&&la.em||[v.atualizadoEm&&new Date(v.atualizadoEm).toISOString(),v.criado&&new Date(v.criado).toISOString()].filter(Boolean).sort().pop();
-  return `<div class="lucro-row fin ${ok?(k.lucro>=0?"pos":"neg"):""}"><div><span>${c.vendido?"Lucro real":"Lucro no lance máx."}</span><b>${ok?(k.lucro>=0?"+":"")+brl(k.lucro):"—"}</b><small>${ok?base+(isFinite(k.roi)?" · ROI "+pct(k.roi):""):"falta venda alvo para calcular o lance máx."}</small></div><div class="upd"><span>${la?"Lance lido":"Atualizado"}</span><b>${ts?haQuanto(ts):"—"}</b></div></div>`;
-}
 function barraLances(){const ms=filtrados().filter(v=>(v.status||"avaliacao")==="avaliacao");if(!ms.length)return "";
   const ult=ms.map(v=>laInfo(v)&&laInfo(v).em).filter(Boolean).sort();const velho=ult.length?ult[0]:null;
   return `<div class="lances-bar fin"><button class="btn sm" id="listaLances">🔄 Puxar lances atuais${fgrupoId?" do edital":""}</button><span>${ms.length} moto(s) em avaliação · ${ult.length?`mais antigo lido ${haQuanto(velho)}`:"nenhum lance lido ainda"}</span></div>`}
+// lance máximo usado nas contas: o "Meu limite" (se você fixou) ou o sugerido pela % da FIPE
+function lanceMaxDe(v,c){c=c||calc(v);const lim=num((v.vistoria||{}).limite);return lim?{valor:lim,tipo:"limite"}:(c.lmax?{valor:c.lmax,tipo:c.lmaxBase}:null)}
+const brlC=x=>(x<0?"−":"")+"R$ "+Math.round(Math.abs(x)).toLocaleString("pt-BR");
+function heroLances(v,c){
+  const la=laInfo(v);const lm=lanceMaxDe(v,c);const L=lm?calc({...v,lance:String(lm.valor)}):null;const LA=la?calc({...v,lance:String(la.valor)}):null;
+  const ok=L&&isFinite(L.lucro);const acima=la&&lm&&la.valor+(la.inc||0)>lm.valor;
+  return `<div class="hero-l fin" data-noopen="1">
+    <div class="hl"><span>${la?"Lance atual":"Lance mínimo"}</span><b>${la?brlC(la.valor):v.lanceMin?brlC(num(v.lanceMin)):"—"}</b><small>${la?haQuanto(la.em):"sem leitura"}</small></div>
+    <button class="hl hl-max ${acima?"estourou":""}" data-lmx="${v.id}"><span>Lance máx. ✎</span><b>${lm?brlC(lm.valor):"—"}</b><small>${!lm?"sem FIPE/venda":lm.tipo==="limite"?"seu limite":lm.tipo==="fipe"?`${c.pctF}% da FIPE`:"pela margem"}${acima?" · ⚠ passou":""}</small></button>
+    <div class="hl ${ok?(L.lucro>=0?"pos":"neg"):""}"><span>Lucro líquido</span><b>${ok?(L.lucro>=0?"+":"")+brlC(L.lucro):"—"}</b><small>${LA&&isFinite(LA.lucro)?`no atual ${brlC(LA.lucro)}`:"no lance máx."}</small></div>
+  </div>`}
+function lmxEditor(v){const c=calc(v);const lim=num((v.vistoria||{}).limite);
+  return `<div class="lmx-ed fin" data-noopen="1" id="lmx-${v.id}">
+   ${c.fipe?`<div class="lmx-top"><b>Teto do investimento: <span data-lmxv="pct">${c.pctF}</span>% da FIPE</b><small>FIPE ${brl(c.fipe)}</small></div>
+   <input type="range" min="30" max="100" step="1" value="${c.pctF}" data-lmxr="${v.id}">
+   <div class="lmx-tab">
+     <div><span>Teto (FIPE × %)</span><b data-lmxv="teto">${brl(c.teto)}</b></div>
+     <div><span>− Custas do edital</span><b>${brl(c.cu.fixas+c.extras)}</b></div>
+     <div><span>− Documentação / pendências${c.usaServ?" (serviços)":""}</span><b>${brl(c.docsPrev)}</b></div>
+     <div><span>− Vistoria (orçado + ${c.cu.conting}% reserva)</span><b>${brl(c.orcTot*(1+c.cu.conting/100))}</b></div>
+     <div><span>÷ comissão ${c.cu.comPct}%${c.cu.admPct?` + adm ${c.cu.admPct}%`:""}</span><b></b></div>
+     <div class="tot"><span>= Lance máximo (só o lance)</span><b data-lmxv="lmax">${brl(c.lmax)}</b></div>
+     <div><span>Lucro líquido nesse lance (venda ${brl(c.V)})</span><b data-lmxv="lucro">—</b></div>
+   </div>`:`<div class="mini">Sem FIPE: informe a FIPE na aba Dados para calcular pela %. Hoje a conta usa venda alvo − margem.</div>`}
+   <div class="toolbar" style="margin:8px 0 0">${c.fipe?`<button class="btn sm" data-lmxsave="${v.id}">Salvar %</button><button class="btn ghost sm" data-lmxpad="${v.id}">Padrão (${num(PCFG.pctFipe)||70}%)</button>`:""}
+     <button class="btn ghost sm" data-lmxfix="${v.id}">${lim?"Trocar meu limite pelo sugerido":"Fixar como meu limite"}</button>${lim?`<button class="btn ghost sm" data-lmxclr="${v.id}">Limpar meu limite (${brl(lim)})</button>`:""}<button class="btn ghost sm" data-lmxx="1">Fechar</button></div>
+  </div>`}
+let lmxAberto=null;
 function lista(){
   if(!vivos().length)return barraFiltro()+emptyHTML();
-  if(!emVistoria().length)return barraFiltro()+`<div class="card empty"><div class="big">🔍</div><h3>Nenhuma moto em vistoria</h3><p>As motos já arrematadas ficam na aba 📊 Painel, em "Minhas motos". Importe um edital ou um lote por link para avaliar novas motos.</p></div>`;
+  const nd=descartadas().length;
+  const tg=nd||verDesc?`<div class="seg-desc"><button data-vdesc="0" class="${verDesc?"":"on"}">🔍 Em vistoria · ${emVistoria().length}</button><button data-vdesc="1" class="${verDesc?"on":""}">🚫 Sem interesse · ${nd}</button></div>`:"";
+  if(!verDesc&&!emVistoria().length)return barraFiltro()+tg+`<div class="card empty"><div class="big">🔍</div><h3>Nenhuma moto em vistoria</h3><p>As motos já arrematadas ficam na aba 📊 Painel, em "Minhas motos". Importe um edital ou um lote por link para avaliar novas motos.</p></div>`;
   const arr=filtrados();
-  return barraFiltro()+barraLances()+`<div class="grid list">${arr.map(v=>{const c=calc(v);const s=v.status||"arrematado";const vp=vistProg(v);const vs=v.vistoria||{};const g=grupoDe(v);const nt=notaFinal(v);
-    return `<div class="card vcard ${v.fotosRef?"has-cover":""}" data-open="${v.id}">
-      ${v.fotosRef?`<div class="cover"><img src="${esc(v.fotosRef[0])}" alt="" loading="lazy"><div class="cover-tags">${g?`<span>📁 ${esc(g.nome)}</span>`:""}${v.lote?`<span>Lote ${esc(v.lote)}</span>`:""}</div><div class="cover-strip">${v.fotosRef.slice(1).map(u=>`<img src="${esc(u)}" alt="" loading="lazy">`).join("")}</div></div>`:""}
-      <div class="vtop"><div><h3>${esc(v.modelo||"Sem nome")} ${v.ano?`<span style="color:var(--mut);font-weight:500">${esc(v.ano)}</span>`:""}</h3><div class="sub">${[!v.fotosRef&&g?g.nome:"",!v.fotosRef&&v.lote?"Lote "+v.lote:"",v.cor,vs.resp?"👤 "+vs.resp:""].filter(Boolean).map(esc).join(" · ")||"—"}</div></div><span class="chip st-${s}">${STATUS[s]}</span></div>
+  return barraFiltro()+tg+(verDesc?"":barraLances())+`<div class="grid list">${arr.map(v=>{const c=calc(v);const s=v.status||"avaliacao";const vp=vistProg(v);const vs=v.vistoria||{};const g=grupoDe(v);const nt=notaFinal(v);const desc=s==="descartada";
+    return `<div class="card vcard ${v.fotosRef?"has-cover":""} ${desc?"desc":""}" data-open="${v.id}">
+      ${v.fotosRef?`<div class="cover"><img src="${esc(v.fotosRef[0])}" alt="" loading="lazy"><div class="cover-tags">${g?`<span>📁 ${esc(g.nome)}</span>`:""}${v.lote?`<span>Lote ${esc(v.lote)}</span>`:""}</div>
+        ${canWrite&&podeGerir()?(desc?`<button class="cover-x" data-noopen="1" data-desfaz="${v.id}" title="Voltar para a vistoria">↩</button>`:`<button class="cover-x" data-noopen="1" data-descarta="${v.id}" title="Sem interesse">✕</button>`):""}
+        ${desc?"":heroLances(v,c)}</div>`:""}
+      <div class="vtop"><div><h3>${esc(v.modelo||"Sem nome")} ${v.ano?`<span style="color:var(--mut);font-weight:500">${esc(v.ano)}</span>`:""}</h3><div class="sub">${[!v.fotosRef&&g?g.nome:"",!v.fotosRef&&v.lote?"Lote "+v.lote:"",v.cor,vs.resp?"👤 "+vs.resp:""].filter(Boolean).map(esc).join(" · ")||"—"}</div></div>
+        ${!v.fotosRef&&canWrite&&podeGerir()?(desc?`<button class="btn ghost sm" data-noopen="1" data-desfaz="${v.id}">↩ Voltar</button>`:`<button class="btn ghost sm" data-noopen="1" data-descarta="${v.id}" title="Sem interesse">✕</button>`):`<span class="chip st-${s}">${STATUS[s]}</span>`}</div>
+      ${!v.fotosRef&&!desc?heroLances(v,c):""}
+      ${lmxAberto===v.id?lmxEditor(v):""}
       <div class="vist-row"><div class="vbar2"><i style="width:${vp.done/vp.tot*100}%"></i></div><span>Vistoria ${vp.done}/${vp.tot}${vp.pb?` · <b class="neg">${vp.pb} ✕</b>`:""}${(v.fotosVist||[]).length?` · 📷 ${v.fotosVist.length}`:""}${nt!=null?` · <b>${nt.toLocaleString("pt-BR")}/10</b>`:""}${(()=>{const r=resumoConf(v);return r?(r.div?` · <b class="neg">⚠ ${r.div} a conferir</b>`:` · <span class="pos">🧩 conferido</span>`):""})()}</span></div>
-      <div class="vnums fin">${s==="avaliacao"?`<div><span>${laInfo(v)?"Lance atual":"Lance mínimo"}</span><b>${laInfo(v)?brl(laInfo(v).valor):v.lanceMin?brl(num(v.lanceMin)):"—"}</b>${laInfo(v)?`<small>${haQuanto(laInfo(v).em)}</small>`:""}</div><div><span>Meu limite</span><b>${num(vs.limite)?brl(num(vs.limite)):"—"}</b></div><div><span>Lance máx. calc.</span><b>${c.lmax?brl(c.lmax):"—"}</b></div>`
-        :`<div><span>Custo previsto</span><b>${brl(c.custo)}</b></div><div><span>${c.vendido?"Vendido":"Venda alvo"}</span><b>${c.venda?brl(c.venda):"—"}</b></div><div><span>ROI</span><b class="${c.lucro>=0?"pos":"neg"}">${isFinite(c.roi)?pct(c.roi):"—"}</b></div>`}</div>
-      ${lucroLinha(v,c,s)}
+      ${!c.fipe&&!desc?`<div class="mini">Sem FIPE: o lance máximo usa venda alvo − margem.</div>`:""}
+      ${desc&&v.descMotivo?`<div class="mini">Motivo: ${esc(v.descMotivo)}</div>`:""}
     </div>`}).join("")||`<div class="empty">Nada encontrado.</div>`}</div>`;
 }
+function lmxAtualizar(v,pctNovo){const c=calc({...v,pctFipe:pctNovo});const box=$("#lmx-"+v.id);if(!box)return;
+  const set=(k,t)=>{const e=box.querySelector(`[data-lmxv="${k}"]`);if(e)e.textContent=t};
+  const L=c.lmax?calc({...v,pctFipe:pctNovo,lance:String(c.lmax)}):null;
+  set("pct",pctNovo);set("teto",brl(c.teto));set("lmax",brl(c.lmax));set("lucro",L&&isFinite(L.lucro)?brl(L.lucro):"—");
+  const lu=box.querySelector('[data-lmxv="lucro"]');if(lu&&L)lu.className=L.lucro>=0?"pos":"neg"}
+document.addEventListener("input",e=>{const r=e.target.closest&&e.target.closest("[data-lmxr]");if(!r)return;const v=vehicles.find(x=>x.id===r.dataset.lmxr);if(v)lmxAtualizar(v,+r.value)});
+document.addEventListener("click",e=>{const t=e.target.closest("[data-lmx],[data-lmxsave],[data-lmxpad],[data-lmxfix],[data-lmxclr],[data-lmxx],[data-descarta],[data-desfaz],[data-vdesc]");if(!t)return;
+  e.stopPropagation();const id=t.dataset.lmx||t.dataset.lmxsave||t.dataset.lmxpad||t.dataset.lmxfix||t.dataset.lmxclr||t.dataset.descarta||t.dataset.desfaz;const v=vehicles.find(x=>x.id===id);
+  if(t.dataset.vdesc!=null){verDesc=t.dataset.vdesc==="1";lmxAberto=null;renderBg();return}
+  if(t.dataset.lmxx){lmxAberto=null;renderBg();return}
+  if(!v)return;
+  if(t.dataset.lmx){lmxAberto=lmxAberto===id?null:id;renderBg();if(lmxAberto)setTimeout(()=>{lmxAtualizar(v,pctFipeDe(v));const b=$("#lmx-"+id);if(b)b.scrollIntoView({block:"nearest",behavior:"smooth"})},30);return}
+  if(!canWrite)return toast("Somente visualização");
+  if(t.dataset.lmxsave){const r=document.querySelector(`[data-lmxr="${id}"]`);v.pctFipe=r?String(r.value):v.pctFipe;persist(v);toast(`Lance máx. em ${v.pctFipe}% da FIPE ✓`);renderBg();setTimeout(()=>lmxAtualizar(v,pctFipeDe(v)),30);return}
+  if(t.dataset.lmxpad){delete v.pctFipe;persist(v);renderBg();setTimeout(()=>lmxAtualizar(v,pctFipeDe(v)),30);return}
+  if(t.dataset.lmxfix){const r=document.querySelector(`[data-lmxr="${id}"]`);const c=calc(r?{...v,pctFipe:r.value}:v);if(!c.lmax)return toast("Sem FIPE ou venda alvo para calcular");if(r)v.pctFipe=String(r.value);v.vistoria=v.vistoria||{checks:{}};v.vistoria.limite=String(Math.floor(c.lmax/50)*50);persist(v);toast(`Meu limite: ${brl(num(v.vistoria.limite))} ✓`);renderBg();return}
+  if(t.dataset.lmxclr){v.vistoria.limite="";persist(v);renderBg();return}
+  if(t.dataset.descarta){if(t.dataset.conf!=="1"){t.dataset.conf="1";t.classList.add("conf");t.textContent="Sem interesse?";setTimeout(()=>{if(t.isConnected){t.dataset.conf="";t.classList.remove("conf");t.textContent="✕"}},3000);return}
+    v.statusAntes=v.status;v.status="descartada";v.descEm=new Date().toISOString();persist(v);if(lmxAberto===id)lmxAberto=null;renderBg();toast(`${v.modelo||"Moto"} saiu da vistoria (veja em "Sem interesse")`);return}
+  if(t.dataset.desfaz){v.status="avaliacao";delete v.descEm;persist(v);renderBg();toast("Voltou para a vistoria ✓");return}
+},true);
 function comparar(){
   const arr=filtrados().filter(v=>!["vendido"].includes(v.status));
   const tk="leilaoTeto_"+(fgrupoId||"todos");let teto=0;try{teto=num(localStorage.getItem(tk))}catch(e){}
@@ -107,7 +155,7 @@ function comparar(){
   ${Object.keys(arrem).length?`<div class="sec-t">📊 Arremates registrados (base real)</div><div class="card">${Object.entries(arrem).map(([f,vs])=>`<div class="rank"><span class="nm">${esc(f||"—")}</span><span class="mini" style="margin:0">${vs.length} leilão(ões)</span><b class="num">${brl(mediana(vs))}</b></div>`).join("")}<div class="mini">Mediana do valor final de arremate por modelo.</div></div>`:""}`;
 }
 function bindMain(){
-  document.querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>openEditor(el.dataset.open));
+  document.querySelectorAll("[data-open]").forEach(el=>el.onclick=e=>{if(e.target.closest("[data-noopen],.lmx-ed"))return;openEditor(el.dataset.open)});
   document.querySelectorAll("[data-gver2]").forEach(el=>el.onclick=()=>{fgrupoId=el.dataset.gver2;vmodo="lista";tab="veiculos";render()});
   const b=$("#busca");if(b)b.oninput=e=>{filtro=e.target.value;const p=b.selectionStart;renderBg();const nb=$("#busca");nb.focus();nb.setSelectionRange(p,p)};
   const fs=$("#fst");if(fs)fs.onchange=e=>{fstatus=e.target.value;renderBg()};

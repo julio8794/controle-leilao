@@ -28,7 +28,7 @@ function renderEditor(){
   const v=editing;if(!v)return;
   const tabs=[["vistoria","🔍 Vistoria"],["numeros","💰 Números","fin"],["leilao","🏁 Leilão","fin"],["dados","📄 Dados"],["docs",`📎 Docs${(v.docs||[]).length?" "+v.docs.length:""}`]];
   $("#sheet").innerHTML=`<div class="shead"><div class="row"><button class="btn ghost sm" id="xClose">← Voltar</button><h2 id="eTitle">${esc(v.modelo||"Novo veículo")}</h2>${v.lote?`<span class="chip st-avaliacao">Lote ${esc(v.lote)}</span>`:""}</div>
-   <div class="summ fin"><div><span>Custo previsto</span><b id="sCusto">—</b></div><div><span>Lance máx.</span><b id="sLmax">—</b></div><div><span>Lucro · ROI</span><b id="sLucro">—</b></div><div><span>Nota</span><b id="sNota">—</b></div></div>
+   <div class="summ fin"><div><span>Custo previsto</span><b id="sCusto">—</b></div><div><span>Lance máx. sugerido</span><b id="sLmax">—</b></div><div><span>Lucro líquido · ROI</span><b id="sLucro">—</b></div><div><span>Nota</span><b id="sNota">—</b></div></div>
    <div class="etabs">${tabs.map(([k,l,c])=>`<button data-etab="${k}" class="${etab===k?"on":""} ${c||""}">${l}</button>`).join("")}</div></div>
   <div class="sbody" id="eBody"></div>`;
   renderETab();bindEditor();
@@ -77,7 +77,7 @@ function tabNumeros(v){
   const real=k=>(v.despesas||[]).filter(d=>d.cat===k).reduce((a,d)=>a+num(d.valor),0);
   const prev=k=>orc.filter(o=>o.cat===k&&o.on!==false).reduce((a,o)=>a+num(o.valor),0);
   const socios=v.socios||[];const totAp=socios.reduce((a,s)=>a+num(s.aporte),0);
-  return `<fieldset><legend>📁 Edital</legend>${g?`<div><b>${esc(g.nome)}</b> <span class="mini">${custasResumo(g.custas).join(" · ")}</span></div>`:`<div class="mini">Sem grupo. Defina na aba 🏁 Leilão para usar as custas do edital.</div>`}
+  return servicosHTML(v,c)+`<fieldset><legend>📁 Edital</legend>${g?`<div><b>${esc(g.nome)}</b> <span class="mini">${custasResumo(g.custas).join(" · ")}</span></div>`:`<div class="mini">Sem grupo. Defina na aba 🏁 Leilão para usar as custas do edital.</div>`}
     <div class="f2" style="margin-top:8px"><label>Comissão (%) desta moto<input data-k="comissaoPct" inputmode="decimal" value="${esc(fmtIn(v.comissaoPct))}" placeholder="edital: ${num(cu.c.comissaoPct)}"></label><label>Taxa adm. (%) desta moto<input data-k="taxaAdmPct" inputmode="decimal" value="${esc(fmtIn(v.taxaAdmPct))}" placeholder="edital: ${num(cu.c.taxaAdmPct)}"></label></div>
     <div class="mini">Deixe vazio para usar o valor do edital.</div></fieldset>
   <fieldset><legend><span class="dot" style="background:var(--c-arremate)"></span>🔨 Arremate</legend>
@@ -106,6 +106,14 @@ function tabNumeros(v){
   <fieldset><legend>📈 Controle FIPE × venda</legend><div id="fipeBox"></div>
     <div class="toolbar" style="margin:10px 0 0"><button class="btn ghost sm" id="fAdd">＋ Registrar FIPE de hoje</button><a class="lk" style="font-size:13px" href="https://veiculos.fipe.org.br/" target="_blank" rel="noopener">FIPE oficial ↗</a></div></fieldset>`;
 }
+/* ----- serviços fixos (Config → Custos padrão) ----- */
+function servicosHTML(v,c){const ss=c.servs;const cfg=c.usaServ;
+  return `<fieldset class="fin"><legend>📑 Serviços e pendências</legend>
+   ${cfg?ss.map(x=>`<label class="nv-chk srv ${x.pago?"feito":""}"><input type="checkbox" data-srv="${x.k}" ${x.on?"checked":""} ${x.pago||!canWrite?"disabled":""}><span><b>${esc(x.n)}</b> · ${x.valor?brl(x.valor):"<small>sem valor no Config</small>"}${x.pago?` <span class="pos">✓ pago</span>`:""}
+     <small>${x.manual?"escolhido por você":x.auto?"automático":"desligado"}${x.motivo?" · "+esc(x.motivo):""}</small></span>${x.on&&!x.pago&&x.valor&&canWrite?`<button class="btn ghost sm" data-srvpago="${x.k}">Paguei</button>`:""}</label>`).join("")
+     +`<div class="mini" style="margin-top:6px">Previsto: <b>${brl(c.servPrev)}</b>. Entra no custo e reduz o lance máximo. Ao clicar em "Paguei" vira gasto real de documentação.</div>`
+   :`<div class="mini">Defina os valores de transferência, transferência de estado, vistoria e desalienação em ⚙ Config → Custos padrão. Enquanto isso, a conta usa a documentação típica do edital.</div>`}
+  </fieldset>`}
 /* ----- aba Leilão ----- */
 function tabLeilao(v){
   const c=calc(v);const L=v.leilao||{};const pz=prazosDe(v);
@@ -118,8 +126,10 @@ function tabLeilao(v){
     ${(v.leilao.historico||[]).length>1?`<div class="mini" style="margin-top:6px">Evolução: ${v.leilao.historico.slice(-8).map(h=>brl(h.valor).replace(",00","")).join(" → ")}</div>`:""}
     <div class="toolbar" style="margin:8px 0 0"><button class="btn ghost sm" id="laUm">🔄 Atualizar</button></div></fieldset>`:(/^https?:/.test(v.link||"")?`<div class="toolbar" style="margin:0 0 10px"><button class="btn ghost sm" id="laUm">🔄 Buscar lance atual no site</button></div>`:"")})()}
   <fieldset><legend>🎯 Limite de lance</legend>
-    <div class="calc big"><span>Lance máximo calculado</span><b id="lLmax">—</b></div>
-    <div class="mini">Venda alvo ${brl(c.V)} − margem ${c.cu.margem}% − custas do edital − orçamento ${brl(c.orcTot+c.docsPrev)} (+${c.cu.conting}% reserva), dividido por (1 + comissão + taxa adm.).</div>
+    <div class="calc big"><span>Lance máximo sugerido (só o lance)</span><b id="lLmax">—</b></div>
+    ${c.fipe?`<div class="f2" style="margin-top:6px">${inp("pctFipe","Teto do investimento (% da FIPE)",{num:1,ph:"padrão: "+(num(PCFG.pctFipe)||70)})}<div class="mini" style="align-self:end">FIPE ${brl(c.fipe)} × ${c.pctF}% = <b>${brl(c.teto)}</b></div></div>
+    <div class="mini">Teto ${brl(c.teto)} − custas do edital ${brl(c.cu.fixas+c.extras)} − documentação/pendências ${brl(c.docsPrev)} − vistoria ${brl(c.orcTot)} (+${c.cu.conting}% reserva), dividido por (1 + comissão ${c.cu.comPct}%${c.cu.admPct?" + adm "+c.cu.admPct+"%":""}). A comissão e as custas entram no valor do arremate, não no lance.</div>`
+    :`<div class="mini">Sem FIPE: venda alvo ${brl(c.V)} − margem ${c.cu.margem}% − custas do edital − orçamento ${brl(c.orcTot+c.docsPrev)} (+${c.cu.conting}% reserva), dividido por (1 + comissão + taxa adm.). Informe a FIPE na aba Dados para calcular pela %.</div>`}
     <div class="f2" style="margin-top:8px"><label>Meu lance limite (R$)<input data-vk="limite" inputmode="decimal" value="${esc(fmtIn((v.vistoria||{}).limite))}"></label><div style="display:flex;align-items:flex-end"><button class="btn ghost sm" id="usarLmax">Usar o calculado</button></div></div></fieldset>
   <fieldset><legend>🏁 Resultado do leilão</legend>
     <div class="f2"><label>Resultado<select data-lk="resultado">${[["","Aguardando"],["ganhou","Arrematei"],["perdeu","Perdi"],["nao","Não participei"]].map(([k,n])=>`<option value="${k}" ${(L.resultado||"")===k?"selected":""}>${n}</option>`).join("")}</select></label>
@@ -143,7 +153,8 @@ function tabDados(v){
 function refresh(){
   const v=editing;if(!v)return;const c=calc(v);const set=(id,t,cl)=>{const e=$("#"+id);if(e){e.textContent=t;if(cl!==undefined)e.className=cl}};
   const nt=notaFinal(v);
-  set("sCusto",brl(c.custo));set("sLmax",c.lmax?brl(c.lmax):"—");set("sLucro",isFinite(c.roi)?pct(c.roi):"—",isFinite(c.lucro)?(c.lucro>=0?"pos":"neg"):"");set("sNota",nt!=null?nt.toLocaleString("pt-BR")+"/10":"—");
+  set("sCusto",brl(c.custo));set("sLmax",c.lmax?brl(c.lmax):"—");{let lu=c.lucro,ro=c.roi;if(!isFinite(lu)&&(v.status||"avaliacao")==="avaliacao"){const lm=lanceMaxDe(v,c);if(lm){const L=calc({...v,lance:String(lm.valor)});lu=L.lucro;ro=L.roi}}
+   set("sLucro",isFinite(lu)?`${brl(lu)}${isFinite(ro)?" · "+pct(ro):""}`:"—",isFinite(lu)?(lu>=0?"pos":"neg"):"")}set("sNota",nt!=null?nt.toLocaleString("pt-BR")+"/10":"—");
   set("vLmax",c.lmax?brl(c.lmax):"informe venda alvo ou FIPE");set("lLmax",c.lmax?brl(c.lmax):"informe venda alvo ou FIPE");
   set("cCom",brl(c.comissao+c.adm));set("cPag",brl(c.pagamento));
   const cf=$("#cFipe");if(cf)cf.textContent=c.fipe?`Arremate = ${pct(c.pagamento/c.fipe)} da FIPE · custo previsto = ${pct(c.pctFipe)} da FIPE`:"";
@@ -173,6 +184,7 @@ function bindEditor(){
       if(t.dataset.lk==="valorFinal"&&v.leilao.resultado==="ganhou")v.lance=t.value}
     else if(t.dataset.sc!=null){const x=(v.socios||[])[+t.dataset.sc];if(x)x[t.dataset.sf]=t.value}
     else if(t.dataset.oon){const o=(v.orcado||[]).find(x=>x.id===t.dataset.oon);if(o){o.on=t.checked;t.closest(".orc2").classList.toggle("off",!t.checked)}}
+    else if(t.dataset.srv){v.servicos=v.servicos||{};v.servicos[t.dataset.srv]=t.checked;setTimeout(()=>keepScroll(renderETab),0)}
     else if(t.dataset.pz){v.prazos=v.prazos||{};v.prazos[t.dataset.pz]=t.checked?new Date().toISOString().slice(0,10):null;setTimeout(renderETab,0)}
     else return;
     salvar();
@@ -187,6 +199,7 @@ function bindEditor(){
       (v.orcado||[]).filter(o=>o.item===k).forEach(o=>o.on=nv==="at"||nv==="pb");
       if(vistProg(v).done>=CHECKS.length&&(!v.vistoria.status||v.vistoria.status==="a_vistoriar"))v.vistoria.status="vistoriada";
       keepScroll(renderETab);salvar();return}
+    if(t.dataset.srvpago){const x=calc(v).servs.find(y=>y.k===t.dataset.srvpago);if(x){v.despesas=v.despesas||[];v.despesas.push({id:uid(),cat:"documentacao",desc:x.n,valor:String(x.valor),serv:x.k,data:new Date().toISOString().slice(0,10)});toast(`${x.n} lançado como gasto ✓`);keepScroll(renderETab);salvar()}return}
     if(t.dataset.orcadd!==undefined){const k=t.dataset.orcadd;v.orcado=v.orcado||[];const sug=sugerirPreco(t.dataset.desc,v.modelo);
       const o={id:uid(),cat:k?CHECK_CAT[k]:"outros",desc:t.dataset.desc,valor:sug?String(sug.mediana):"",item:k||null,origem:k?"vistoria":"manual",on:true};v.orcado.push(o);
       if(sug)registrarPreco("orc:"+v.id+":"+o.id,o.desc,o.cat,o.valor,o.origem,v);keepScroll(renderETab);salvar();
