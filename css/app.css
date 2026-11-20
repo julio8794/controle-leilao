@@ -352,3 +352,5 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 .doc-alerta{margin-bottom:12px;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,#dc2626 13%,transparent);border-left:3px solid #dc2626;font-size:13px}
 .doc-alerta small{color:var(--mut)}
 input[hidden],label input[hidden]{display:none!important}
+.cvg{margin-top:10px}.cvg-t{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut);margin-bottom:2px}
+.cvc{margin-top:6px!important}.cvc small{font-size:11px}

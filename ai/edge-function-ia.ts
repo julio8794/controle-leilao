@@ -210,29 +210,73 @@ REGRAS INVIOLÁVEIS:
 }
 // ---------- consulta veicular externa (Recupera Big Tech) — só produtos sobre o VEÍCULO ----------
 // Lista fechada no servidor: o app não consegue pedir produtos fora daqui (pessoas, radar, proprietários ficam de fora).
-const CONSULTAS: Record<string, { nome: string; entrada: "placa" | "chassi"; preco: number }> = {
-  "renajud-restricoes": { nome: "Restrições judiciais (Renajud)", entrada: "placa", preco: 0.50 },
-  "sng-gravames": { nome: "Gravame / alienação (SNG)", entrada: "placa", preco: 0.50 },
-  "ocorrencias-senatran": { nome: "Roubo / furto (Senatran)", entrada: "placa", preco: 0.45 },
-  "multas-senatran": { nome: "Multas (Senatran)", entrada: "placa", preco: 0.45 },
-  "placa-mj": { nome: "Situação e restrições (MJ)", entrada: "placa", preco: 0.42 },
-  "recall-senatran": { nome: "Recall (por chassi)", entrada: "chassi", preco: 0.45 },
-  "leilao-base01-score": { nome: "Score de passagem por leilão", entrada: "placa", preco: 4.96 },
+// Catálogo de consultas SOBRE O VEÍCULO (entrada placa, chassi, renavam ou motor).
+// Fora de propósito: consultas por CPF/CNPJ, CNH, frota de pessoa, histórico de proprietários, comunicação de venda, passagens em radar e bases "PWN".
+type Entrada = "placa" | "chassi" | "renavam" | "motor";
+const CONSULTAS: Record<string, { nome: string; entrada: Entrada; preco: number; grupo: string }> = {
+  "renajud-restricoes": { nome: "RENAJUD — restrições judiciais", entrada: "placa", preco: 0.50, grupo: "Restrições e gravame" },
+  "renajud-senatran": { nome: "Restrições Renajud (Senatran)", entrada: "placa", preco: 0.45, grupo: "Restrições e gravame" },
+  "renajud-processos": { nome: "RENAJUD — processos judiciais do veículo", entrada: "placa", preco: 0.48, grupo: "Restrições e gravame" },
+  "sng-gravames": { nome: "SNG — gravame / alienação", entrada: "placa", preco: 0.50, grupo: "Restrições e gravame" },
+  "historico-restricoes-databras": { nome: "Histórico e restrições do veículo", entrada: "placa", preco: 1.00, grupo: "Restrições e gravame" },
+  "placa-mj": { nome: "Dados e restrições por placa (MJ)", entrada: "placa", preco: 0.42, grupo: "Restrições e gravame" },
+  "ocorrencias-senatran": { nome: "Roubo / furto (Senatran)", entrada: "placa", preco: 0.45, grupo: "Roubo e furto" },
+  "ocorrencias-senatran-databras": { nome: "Ocorrências Senatran (completa)", entrada: "placa", preco: 2.00, grupo: "Roubo e furto" },
+  "multas-senatran": { nome: "Multas (Senatran)", entrada: "placa", preco: 0.45, grupo: "Multas" },
+  "multas-senatran-ctb": { nome: "Multas (Senatran · CTB)", entrada: "placa", preco: 0.45, grupo: "Multas" },
+  "multas-senatran-databras": { nome: "Multas Senatran (completa)", entrada: "placa", preco: 2.00, grupo: "Multas" },
+  "leilao-base01-score": { nome: "Leilão Base 01 — score", entrada: "placa", preco: 4.96, grupo: "Leilão e risco" },
+  "leilao-score-indicio": { nome: "Leilão score + indício", entrada: "placa", preco: 9.36, grupo: "Leilão e risco" },
+  "leilao-vip-gold": { nome: "Leilão VIP Gold", entrada: "placa", preco: 28.64, grupo: "Leilão e risco" },
+  "analise-risco": { nome: "Análise de risco consolidada", entrada: "placa", preco: 7.65, grupo: "Leilão e risco" },
+  "laudo-veicular": { nome: "Laudo veicular SISCSV + ECV", entrada: "placa", preco: 0.90, grupo: "Laudos e vistoria" },
+  "laudo-veicular-historico": { nome: "Histórico de laudos por placa", entrada: "placa", preco: 0.45, grupo: "Laudos e vistoria" },
+  "vistoria-veicular": { nome: "Vistoria — laudo completo com fotos", entrada: "placa", preco: 1.40, grupo: "Laudos e vistoria" },
+  "auto-vistoria": { nome: "Auto vistoria", entrada: "placa", preco: 31.84, grupo: "Laudos e vistoria" },
+  "placa-senatran": { nome: "Veículo por placa (Senatran)", entrada: "placa", preco: 0.60, grupo: "Dados do veículo" },
+  "veiculo-senatran": { nome: "Ficha completa Senatran", entrada: "placa", preco: 0.90, grupo: "Dados do veículo" },
+  "veiculo-senatran-completo-databras": { nome: "Ficha completa Senatran premium", entrada: "placa", preco: 2.00, grupo: "Dados do veículo" },
+  "placa-serpro": { nome: "Placa via Serpro", entrada: "placa", preco: 0.45, grupo: "Dados do veículo" },
+  "placa-df": { nome: "Placa via DF", entrada: "placa", preco: 0.40, grupo: "Dados do veículo" },
+  "placa-crv": { nome: "Placa via CRV", entrada: "placa", preco: 1.62, grupo: "Dados do veículo" },
+  "placa-databras": { nome: "Consulta de placa", entrada: "placa", preco: 1.00, grupo: "Dados do veículo" },
+  "renavam-base-estadual": { nome: "RENAVAM base estadual", entrada: "placa", preco: 0.80, grupo: "Dados do veículo" },
+  "veiculo-2-0": { nome: "Veículo 2.0", entrada: "placa", preco: 0.90, grupo: "Dados do veículo" },
+  "veiculo-essencial": { nome: "Veículo essencial", entrada: "placa", preco: 30.24, grupo: "Dados do veículo" },
+  "agregados-basica": { nome: "Agregados (motor, câmbio etc.)", entrada: "placa", preco: 0.22, grupo: "Dados do veículo" },
+  "bin-placa": { nome: "Base BIN (placa)", entrada: "placa", preco: 0.09, grupo: "Dados do veículo" },
+  "chassi-senatran": { nome: "Veículo por chassi (Senatran)", entrada: "chassi", preco: 0.60, grupo: "Dados do veículo" },
+  "chassi-serpro": { nome: "Chassi via Serpro", entrada: "chassi", preco: 0.48, grupo: "Dados do veículo" },
+  "chassi-databras": { nome: "Consulta de chassi", entrada: "chassi", preco: 0.90, grupo: "Dados do veículo" },
+  "bin-chassi": { nome: "Base BIN (chassi)", entrada: "chassi", preco: 0.09, grupo: "Dados do veículo" },
+  "renavam-serpro": { nome: "Renavam via Serpro", entrada: "renavam", preco: 0.21, grupo: "Dados do veículo" },
+  "bin-renavam": { nome: "Base BIN (renavam)", entrada: "renavam", preco: 0.09, grupo: "Dados do veículo" },
+  "motor-senatran": { nome: "Veículo por motor (Senatran)", entrada: "motor", preco: 0.60, grupo: "Dados do veículo" },
+  "motor-databras": { nome: "Consulta por nº do motor", entrada: "motor", preco: 1.00, grupo: "Dados do veículo" },
+  "bin-motor": { nome: "Base BIN (motor)", entrada: "motor", preco: 0.09, grupo: "Dados do veículo" },
+  "recall-senatran": { nome: "Recall (por chassi)", entrada: "chassi", preco: 0.45, grupo: "Recall" },
 };
+// remove dados pessoais que algumas bases devolvem junto (proprietário, CPF, endereço...)
+const CHAVE_PESSOAL = /^(nome$|nome_?(do_?|da_?)?(proprietario|possuidor|arrendatario|condutor|comprador|vendedor|mae|pai|cliente|pessoa)|proprietari|possuidor|arrendatari|condutor|cpf|cnpj|documento_?proprietario|rg$|cnh|endereco|logradouro|bairro$|cep$|numero_?endereco|telefone|celular|email|e_?mail|nascimento|data_?nascimento|mae$|pai$|nome_?mae|nome_?pai|sexo$)/i;
+function semPessoais(o: any, d = 0): any {
+  if (d > 12 || o == null || typeof o !== "object") return o;
+  if (Array.isArray(o)) return o.map(x => semPessoais(x, d + 1));
+  const r: any = {}; for (const [k, v] of Object.entries(o)) { const kn = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_]/gi, "_"); if (CHAVE_PESSOAL.test(kn) && (v == null || typeof v !== "object" || /proprietari|possuidor|condutor|comprador|vendedor|arrendatari/i.test(kn))) { r[k] = "[omitido]"; continue } r[k] = semPessoais(v, d + 1) } return r;
+}
 async function consultaVeicular(sbUser: any, email: string, body: any) {
   const key = chaveBigTech(); if (!key) throw new Error("Chave da plataforma de consultas não configurada no Supabase (BIGTECH_API_KEY). Segredos vistos: " + nomesSegredos());
   if (!email || !body.senha) throw new Error("Confirme a sua senha");
   const anon = createClient(Deno.env.get("SUPABASE_URL")!, (Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY"))!, { auth: { persistSession: false } });
   const { error: eLogin } = await anon.auth.signInWithPassword({ email, password: String(body.senha) });
   if (eLogin) { const e: any = new Error("Senha incorreta"); e.status = 403; throw e }
-  const produtos = (body.produtos || []).filter((p: string) => CONSULTAS[p]).slice(0, 10);
+  const produtos = (body.produtos || []).filter((p: string) => CONSULTAS[p]).slice(0, 15);
   if (!produtos.length) throw new Error("Nenhuma consulta válida selecionada");
-  const placa = String(body.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), chassi = String(body.chassi || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const ent: Record<Entrada, string> = { placa: String(body.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), chassi: String(body.chassi || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), renavam: String(body.renavam || "").replace(/\D/g, ""), motor: String(body.motor || "").toUpperCase().replace(/[^A-Z0-9]/g, "") };
+  const valido: Record<Entrada, RegExp> = { placa: /^[A-Z]{3}\d[A-Z0-9]\d{2}$/, chassi: /^[A-HJ-NPR-Z0-9]{17}$/, renavam: /^\d{9,11}$/, motor: /^[A-Z0-9]{5,20}$/ };
   const out: any[] = []; let gasto = 0;
   for (const p of produtos) {
-    const c = CONSULTAS[p]; const input = c.entrada === "placa" ? placa : chassi;
-    if (c.entrada === "placa" && !/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(input)) { out.push({ produto: p, nome: c.nome, ok: false, erro: "Placa ausente ou inválida", custo: 0 }); continue }
-    if (c.entrada === "chassi" && !/^[A-HJ-NPR-Z0-9]{17}$/.test(input)) { out.push({ produto: p, nome: c.nome, ok: false, erro: "Chassi ausente ou incompleto", custo: 0 }); continue }
+    const c = CONSULTAS[p]; const input = ent[c.entrada];
+    if (!valido[c.entrada].test(input)) { out.push({ produto: p, nome: c.nome, ok: false, erro: ({ placa: "Placa ausente ou inválida", chassi: "Chassi ausente ou incompleto", renavam: "Renavam ausente ou inválido", motor: "Nº do motor ausente" })[c.entrada], custo: 0 }); continue }
     const t0 = Date.now();
     try {
       const r = await fetch("https://www.recuperabigtechmundial.com/api/v1/consulta", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ produto: p, input }), signal: AbortSignal.timeout(60000) });
@@ -241,7 +285,8 @@ async function consultaVeicular(sbUser: any, email: string, body: any) {
         const msg = r.status === 402 ? "Saldo insuficiente na plataforma" : r.status === 429 ? "Limite de consultas por hora atingido" : r.status === 401 ? "Chave inválida ou revogada" : r.status === 403 ? "Chave sem permissão para este produto" : r.status === 404 ? "Produto indisponível" : r.status === 502 ? "Fornecedor fora do ar (sem cobrança)" : "Erro " + r.status;
         out.push({ produto: p, nome: c.nome, ok: false, erro: msg + (d?.error || d?.message ? ": " + String(d.error || d.message).slice(0, 150) : ""), custo: 0, ms: Date.now() - t0 }); continue;
       }
-      const res = JSON.stringify(d.result ?? d).length > 60000 ? { aviso: "resultado grande demais para guardar", resumo: JSON.stringify(d.result ?? d).slice(0, 60000) } : (d.result ?? d);
+      d.result = semPessoais(d.result ?? d);
+      const res = JSON.stringify(d.result).length > 60000 ? { aviso: "resultado grande demais para guardar", resumo: JSON.stringify(d.result).slice(0, 60000) } : d.result;
       gasto += c.preco; out.push({ produto: p, nome: c.nome, ok: true, id: d.id || null, entrada: input, resultado: res, custo: c.preco, ms: Date.now() - t0 });
     } catch (e) { out.push({ produto: p, nome: c.nome, ok: false, erro: String((e as Error).message).slice(0, 200), custo: 0 }) }
   }
