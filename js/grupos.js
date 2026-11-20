@@ -41,7 +41,7 @@ function renderGrupo(){
     <label>Nome do grupo<input data-g="nome" value="${esc(g.nome)}" placeholder="Ex.: Alagoinhas 25/11"></label><label>Cidade<input data-g="cidade" value="${esc(g.cidade||"")}"></label>
     <label>Leiloeiro<input data-g="leiloeiro" value="${esc(g.leiloeiro||"")}"></label><label>Comitente<input data-g="comitente" value="${esc(g.comitente||"")}" placeholder="Ex.: DETRAN-BA"></label>
     <label>Data do leilão<input type="date" data-g="data_leilao" value="${esc(g.data_leilao||"")}"></label><label>Link do edital (PDF)<input data-g="edital_url" value="${esc(g.edital_url||"")}" placeholder="https://…"></label></div>
-    ${g.edital_url?`<div class="toolbar" style="margin:10px 0 0"><a class="btn ghost sm" style="text-decoration:none" href="${esc(g.edital_url)}" target="_blank" rel="noopener">📄 Abrir edital</a>${ro?"":`<button class="btn ghost sm" id="gIA">🤖 Ler edital com IA</button>`}</div><div class="mini" id="gIASt"></div>`:""}
+    <div class="toolbar" style="margin:10px 0 0">${g.edital_url?`<a class="btn ghost sm" style="text-decoration:none" href="${esc(g.edital_url)}" target="_blank" rel="noopener">📄 Abrir edital</a>`:""}${ro?"":`<button class="btn ghost sm" id="gIA">🤖 Ler edital com IA</button>`}</div><div id="gIASt"></div>
    </fieldset>
    <fieldset class="fin"><legend>💰 Custas do edital <span class="mini" style="margin:0">— usadas na calculadora de todas as motos do grupo</span></legend>
     <div class="f2">${CUSTAS_NUM.map(([k,l])=>`<label>${l}<input data-gc="${k}" inputmode="decimal" value="${esc(fmtIn(c[k]))}"></label>`).join("")}</div>

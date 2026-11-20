@@ -284,3 +284,9 @@ fieldset.vist{border-color:#f5a52466;background:linear-gradient(180deg,#1f1a0e,v
 .ia-box{border:1px solid rgba(76,141,255,.4);background:rgba(76,141,255,.06);border-radius:12px;padding:12px;margin:10px 0}
 .ia-box .ok{color:var(--good)}.ia-box .no{color:var(--mut);text-decoration:line-through}
 @media(max-width:560px){.summ{grid-template-columns:repeat(2,1fr)}.toolbar .seg2{width:100%}.seg2 button{flex:1}}
+.tag-warn{font-size:11px;border-radius:6px;padding:2px 7px;font-weight:700;background:rgba(245,165,36,.14);color:var(--acc)}
+.ia-it{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.ia-it input{margin-top:3px}.ia-it .evid{margin-top:6px}
+.ia-fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
+.ia-fotos label{position:relative;display:block}.ia-fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;display:block}
+.ia-fotos input{position:absolute;top:4px;left:4px}.ia-fotos label:has(input:not(:checked)) img{opacity:.3}

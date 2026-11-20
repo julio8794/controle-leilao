@@ -54,9 +54,9 @@ function filtrados(){const f=filtro.toLowerCase();
 function barraFiltro(){return `${pacoteBanner()}<div class="toolbar"><input id="busca" placeholder="Buscar modelo, lote, responsável…" value="${esc(filtro)}">
   <select id="fgr"><option value="">Todos os editais</option>${grupos.map(g=>`<option value="${g.id}" ${fgrupoId===g.id?"selected":""}>${esc(g.nome)}</option>`).join("")}</select>
   <select id="fst"><option value="">Todos os status</option>${Object.entries(STATUS).map(([k,n])=>`<option value="${k}" ${fstatus===k?"selected":""}>${n}</option>`).join("")}</select>
-  <div class="seg2"><button data-vm="lista" class="${vmodo==="lista"?"on":""}">📋 Lista</button><button data-vm="comparar" class="${vmodo==="comparar"?"on":""} fin">🏁 Comparar</button></div></div>`}
+  ${podeGerir()?`<div class="toolbar" style="margin:0;width:100%"><button class="btn ghost sm" id="impLink">🔗 Lote por link</button><button class="btn ghost sm" id="impPl">⬆ Planilha</button><button class="btn ghost sm fin" id="expPl">⬇ Exportar</button></div>`:""}<div class="seg2"><button data-vm="lista" class="${vmodo==="lista"?"on":""}">📋 Lista</button><button data-vm="comparar" class="${vmodo==="comparar"?"on":""} fin">🏁 Comparar</button></div></div>`}
 function lista(){
-  if(!vivos().length)return pacoteBanner()+emptyHTML();
+  if(!vivos().length)return barraFiltro()+emptyHTML();
   const arr=filtrados();
   return barraFiltro()+`<div class="grid list">${arr.map(v=>{const c=calc(v);const s=v.status||"arrematado";const vp=vistProg(v);const vs=v.vistoria||{};const g=grupoDe(v);const nt=notaFinal(v);
     return `<div class="card vcard ${v.fotosRef?"has-cover":""}" data-open="${v.id}">
@@ -93,6 +93,7 @@ function bindMain(){
   const te=$("#teto");if(te)te.onchange=()=>{try{localStorage.setItem("leilaoTeto_"+(fgrupoId||"todos"),String(num(te.value)))}catch(e){}renderBg()};
   document.querySelectorAll("[data-pkg]").forEach(x=>x.onclick=()=>importarPacote(x.dataset.pkg));
   const en=$("#eNew");if(en)en.onclick=newV;
+  const il=$("#impLink");if(il)il.onclick=abrirImportLink;const ip=$("#impPl");if(ip)ip.onclick=abrirImportPlanilha;const ep=$("#expPl");if(ep)ep.onclick=exportarPlanilha;
   const ed=$("#eDemo");if(ed)ed.style.display="none";
 }
 function newV(){

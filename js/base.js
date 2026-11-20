@@ -80,7 +80,7 @@ function loadPend(){try{pend=JSON.parse(localStorage.getItem("leilaoPend3")||"{}
 function savePend(){try{localStorage.setItem("leilaoPend3",JSON.stringify(pend))}catch(e){}}
 const pk=(p,id)=>p+"|"+id;
 const isObj=v=>v&&typeof v==="object"&&!Array.isArray(v);
-const SEM_DIFF=new Set(["fotosVist","fotosRef"]); // fotos têm RPC própria (não sobrescrever envio de outra pessoa)
+const SEM_DIFF=new Set(["fotosVist"]); // fotos têm RPC própria (não sobrescrever envio de outra pessoa)
 function diffPaths(a,b,pre="",dep=0,out={}){
   const ka=isObj(a)?a:{},kb=isObj(b)?b:{};
   new Set([...Object.keys(ka),...Object.keys(kb)]).forEach(k=>{
