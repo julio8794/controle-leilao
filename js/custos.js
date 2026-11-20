@@ -1,5 +1,5 @@
 /* ---------- custos da IA ---------- */
-const AGENTE_NOME={ler_edital:"📄 Leitor de edital (custas)",importar_lote:"🌐 Importador de lote",analisar_fotos:"📷 Vistoriador por fotos",mapear_planilha:"📊 Mapeador de planilha",escolher_fipe:"💲 Desempate FIPE",lotes_edital:"📋 Leitor do Anexo I",paginas_edital:"📄 Texto do edital"};
+const AGENTE_NOME={ler_edital:"📄 Leitor de edital (custas)",importar_lote:"🌐 Importador de lote",analisar_fotos:"📷 Vistoriador por fotos",mapear_planilha:"📊 Mapeador de planilha",escolher_fipe:"💲 Desempate FIPE",lotes_edital:"📋 Leitor do Anexo I",paginas_edital:"📄 Texto do edital",transcrever:"🎤 Transcrição de áudio",extrair_vistoria:"🎤 Vistoria por áudio",consulta_veicular:"🔎 Consultas veiculares (externa)"};
 let cotacao=null,custoSessao=0;
 async function usdBrl(){
   if(cotacao)return cotacao;try{const c=JSON.parse(localStorage.getItem("leilaoUSD")||"null");if(c&&Date.now()-c.t<12*36e5)return cotacao=c}catch(e){}
@@ -18,9 +18,10 @@ chamarIA=async function(acao,dados){
 async function gastoMes(){const ini=new Date();ini.setDate(1);ini.setHours(0,0,0,0);const {data}=await sb.from("ia_uso").select("custo_usd").eq("painel_id",painelId).gte("criado_em",ini.toISOString()).limit(5000);return (data||[]).reduce((a,x)=>a+num(x.custo_usd),0)}
 async function custosHTML(){
   const desde=new Date(Date.now()-90*864e5).toISOString();
-  const {data,error}=await sb.from("ia_uso").select("acao,modelo,tokens_in,tokens_cache,tokens_out,custo_usd,origem,ref,ok,erro,ms,criado_em").eq("painel_id",painelId).gte("criado_em",desde).order("criado_em",{ascending:false}).limit(5000);
+  const {data,error}=await sb.from("ia_uso").select("acao,modelo,tokens_in,tokens_cache,tokens_out,custo_usd,custo_brl,origem,ref,ok,erro,ms,criado_em").eq("painel_id",painelId).gte("criado_em",desde).order("criado_em",{ascending:false}).limit(5000);
   if(error)return `<div class="mini neg">Não consegui ler os custos: ${esc(error.message)}</div>`;
   const k=await usdBrl();const R=v=>brl((v||0)*k.v);const rows=data||[];
+  rows.forEach(x=>{x.custo_usd=num(x.custo_usd)+num(x.custo_brl)/k.v;if(x.origem==="consulta")x.origem="ia"});
   const agora=new Date(),hoje=new Date(agora);hoje.setHours(0,0,0,0);const mesIni=new Date(agora.getFullYear(),agora.getMonth(),1);const sem=new Date(Date.now()-7*864e5);
   const soma=f=>rows.filter(f).reduce((a,x)=>a+num(x.custo_usd),0);
   const per=[["Hoje",soma(x=>new Date(x.criado_em)>=hoje)],["7 dias",soma(x=>new Date(x.criado_em)>=sem)],["Este mês",soma(x=>new Date(x.criado_em)>=mesIni)],["90 dias",soma(()=>true)]];

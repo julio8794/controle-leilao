@@ -316,3 +316,6 @@ fieldset .tcmp.conf{display:block;overflow-x:auto}
 .aud{border-bottom:1px solid var(--line);padding:8px 0;font-size:13.5px}.aud small{color:var(--mut)}.aud.erro small{color:var(--bad)}
 .aurev{border:1px solid var(--line);border-radius:12px;padding:10px;margin:10px 0;background:var(--panel)}.aurev select{margin:6px 0}
 .vnums small{display:block;color:var(--mut);font-size:11px;font-weight:500}
+
+.cvres{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin:6px 0}.cvres.alerta{border-color:var(--bad);background:rgba(248,81,73,.05)}.cvres.erro{opacity:.7}
+.cvres summary{cursor:pointer;font-size:13.5px}

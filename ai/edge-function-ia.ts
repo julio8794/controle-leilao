@@ -199,6 +199,45 @@ REGRAS INVIOLÁVEIS:
   }));
   return { resultado: { motos: motosOut, nao_identificado: dados.nao_identificado || [] }, uso };
 }
+// ---------- consulta veicular externa (Recupera Big Tech) — só produtos sobre o VEÍCULO ----------
+// Lista fechada no servidor: o app não consegue pedir produtos fora daqui (pessoas, radar, proprietários ficam de fora).
+const CONSULTAS: Record<string, { nome: string; entrada: "placa" | "chassi"; preco: number }> = {
+  "renajud-restricoes": { nome: "Restrições judiciais (Renajud)", entrada: "placa", preco: 0.50 },
+  "sng-gravames": { nome: "Gravame / alienação (SNG)", entrada: "placa", preco: 0.50 },
+  "ocorrencias-senatran": { nome: "Roubo / furto (Senatran)", entrada: "placa", preco: 0.45 },
+  "multas-senatran": { nome: "Multas (Senatran)", entrada: "placa", preco: 0.45 },
+  "placa-mj": { nome: "Situação e restrições (MJ)", entrada: "placa", preco: 0.42 },
+  "recall-senatran": { nome: "Recall (por chassi)", entrada: "chassi", preco: 0.45 },
+  "leilao-base01-score": { nome: "Score de passagem por leilão", entrada: "placa", preco: 4.96 },
+};
+async function consultaVeicular(sbUser: any, email: string, body: any) {
+  const key = Deno.env.get("BIGTECH_API_KEY"); if (!key) throw new Error("Chave da plataforma de consultas não configurada no Supabase (BIGTECH_API_KEY)");
+  if (!email || !body.senha) throw new Error("Confirme a sua senha");
+  const anon = createClient(Deno.env.get("SUPABASE_URL")!, (Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY"))!, { auth: { persistSession: false } });
+  const { error: eLogin } = await anon.auth.signInWithPassword({ email, password: String(body.senha) });
+  if (eLogin) { const e: any = new Error("Senha incorreta"); e.status = 403; throw e }
+  const produtos = (body.produtos || []).filter((p: string) => CONSULTAS[p]).slice(0, 10);
+  if (!produtos.length) throw new Error("Nenhuma consulta válida selecionada");
+  const placa = String(body.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), chassi = String(body.chassi || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const out: any[] = []; let gasto = 0;
+  for (const p of produtos) {
+    const c = CONSULTAS[p]; const input = c.entrada === "placa" ? placa : chassi;
+    if (c.entrada === "placa" && !/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(input)) { out.push({ produto: p, nome: c.nome, ok: false, erro: "Placa ausente ou inválida", custo: 0 }); continue }
+    if (c.entrada === "chassi" && !/^[A-HJ-NPR-Z0-9]{17}$/.test(input)) { out.push({ produto: p, nome: c.nome, ok: false, erro: "Chassi ausente ou incompleto", custo: 0 }); continue }
+    const t0 = Date.now();
+    try {
+      const r = await fetch("https://www.recuperabigtechmundial.com/api/v1/consulta", { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify({ produto: p, input }), signal: AbortSignal.timeout(60000) });
+      const txt = await r.text(); let d: any; try { d = JSON.parse(txt) } catch { d = { bruto: txt.slice(0, 2000) } }
+      if (!r.ok) {
+        const msg = r.status === 402 ? "Saldo insuficiente na plataforma" : r.status === 429 ? "Limite de consultas por hora atingido" : r.status === 401 ? "Chave inválida ou revogada" : r.status === 403 ? "Chave sem permissão para este produto" : r.status === 404 ? "Produto indisponível" : r.status === 502 ? "Fornecedor fora do ar (sem cobrança)" : "Erro " + r.status;
+        out.push({ produto: p, nome: c.nome, ok: false, erro: msg + (d?.error || d?.message ? ": " + String(d.error || d.message).slice(0, 150) : ""), custo: 0, ms: Date.now() - t0 }); continue;
+      }
+      const res = JSON.stringify(d.result ?? d).length > 60000 ? { aviso: "resultado grande demais para guardar", resumo: JSON.stringify(d.result ?? d).slice(0, 60000) } : (d.result ?? d);
+      gasto += c.preco; out.push({ produto: p, nome: c.nome, ok: true, id: d.id || null, entrada: input, resultado: res, custo: c.preco, ms: Date.now() - t0 });
+    } catch (e) { out.push({ produto: p, nome: c.nome, ok: false, erro: String((e as Error).message).slice(0, 200), custo: 0 }) }
+  }
+  return { resultado: { consultas: out, custo_brl: gasto, em: new Date().toISOString() }, uso: { entrada: 0, cache: 0, saida: 0, modelo: "recupera-big-tech", agente: "consulta", custo_fixo: 0, custo_brl: gasto } };
+}
 // ---------- skills ----------
 async function lerEdital(url: string) {
   const { bytes } = await baixar(url, 20e6);
@@ -361,6 +400,13 @@ Deno.serve(async (req) => {
   try {
     let r: any;
     if (acao === "paginas_edital") { const ps = await textoPdf(body.url); const re = new RegExp(body.filtro || "chassi|renavam|placa", "i"); return json({ total: ps.length, paginas: ps.map((t, i) => ({ n: i + 1, t })).filter(p => re.test(p.t)).map(p => ({ ...p, t: p.t.slice(0, body.max || 6000) })) }) }
+    if (acao === "consulta_veicular") {
+      if (papel !== "dono") return erro("Só o dono do painel pode fazer consultas veiculares", 403);
+      if (!body.produtos_lista) { const r = await consultaVeicular(sb, u.user.email || "", body);
+        await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: "recupera-big-tech", custo_usd: 0, custo_brl: r.uso.custo_brl, origem: "consulta", ref: String(body.ref || body.placa || "").slice(0, 300), ms: Date.now() - t0, ok: r.resultado.consultas.some((x: any) => x.ok), erro: r.resultado.consultas.filter((x: any) => !x.ok).map((x: any) => x.nome + ": " + x.erro).join(" | ").slice(0, 300) || null });
+        return json({ ...r.resultado, _uso: { custo_brl: r.uso.custo_brl, agente: "consulta" } }) }
+      return json({ produtos: Object.entries(CONSULTAS).map(([slug, c]) => ({ slug, ...c })) });
+    }
     if (acao === "lotes_edital") { const ps = await textoPdf(body.url); const x = lerAnexoLotes(ps); await sb.from("ia_uso").insert({ painel_id, user_id: u.user.id, acao, modelo: "sem IA (Anexo I)", custo_usd: 0, origem: "codigo", ref: String(body.url).slice(0, 300), ms: Date.now() - t0, ok: true }); return json({ paginas: ps.length, ...x, _uso: { custo_usd: 0, agente: "codigo" } }) }
     if (acao === "ler_edital") r = await lerEdital(body.url);
     else if (acao === "escolher_fipe") r = await escolherFipe(body.veiculo, body.ano, body.candidatos);
